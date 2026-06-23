@@ -8,6 +8,8 @@ let enemies=[];          // typed enemy tanks (see data/types.js)
 let shells=[];           // {x,y,vx,vy,b,life,team,owner}
 let particles=[];        // sparks (muzzle / hit / death bursts)
 let smoke=[];            // shell smoke trails (drawn behind shells)
+let mines=[];            // {x,y,team,owner,arm,fuse,blast,dead}
+let tracks=[];           // tread marks {x,y,a,life,max} — fade out; cleared between levels
 let score=0;
 let shake=0;
 
@@ -31,9 +33,15 @@ function spawnEnemy(typeName, x, y){
     rocket:t.rocket, aim:t.aim, engage:t.engage, mines:t.mines, invisible:t.invisible,
     fireGap:t.fireGap, lastFire:0,
     nextFireAt: now + t.fireGap[0] + Math.random()*(t.fireGap[1]-t.fireGap[0]),
+    nextMineAt: now + 900 + Math.random()*1600,
   };
   enemies.push(e);
   return e;
+}
+
+// Drop a mine under a tank (owner-tagged, team-tagged).
+function layMine(t){
+  mines.push({x:t.x,y:t.y,team:t.team,owner:t,arm:1.0,fuse:6.0,blast:46,dead:false});
 }
 
 // A spawn point clear of the player and obstacles.
@@ -54,7 +62,6 @@ function spawnSandboxSet(){
 }
 
 // Roguelike wave composition (T7). Hand-authored opener; procedural escalation at 8+.
-// Yellow/White are held back to M3 (their mine/invisibility signatures aren't built yet).
 const WAVES=[
   null,                                               // [0] unused (waves are 1-indexed)
   ['brown','brown','brown'],
@@ -62,20 +69,23 @@ const WAVES=[
   ['grey','grey','grey','teal'],
   ['grey','grey','red','teal'],
   ['red','red','green','teal','teal'],
-  ['red','red','green','purple','teal'],
+  ['yellow','yellow','red','red','green'],            // wave 6: mines arrive
   ['purple','red','red','green','green','teal'],
 ];
 function waveRoster(level){
   if(level<WAVES.length) return WAVES[level].slice();
-  // 8+: procedural escalation from the working roster, introduce Black, cap ~12
-  const pool=['grey','teal','red','green','purple','black'];
+  // 8+: procedural escalation; introduce White then Black, cap ~12
+  const pool=['grey','teal','red','green','purple','yellow','white','black'];
   const n=Math.min(6+(level-7),12);
   const out=[]; for(let i=0;i<n;i++) out.push(pool[Math.floor(Math.random()*pool.length)]);
-  if(level>=9 && !out.includes('black')) out[0]='black';
+  if(level>=8 && !out.includes('white')) out[0]='white';
+  if(level>=9 && !out.includes('black')) out[1]='black';
   return out;
 }
 // Spawn the current level's wave in "warp-in" state and start the countdown.
+// Between-level cleanup: clear leftover mines and tread marks (lets you re-hunt Whites).
 function beginWave(){
+  mines.length=0; tracks.length=0;
   waveRoster(run.level).forEach(tp=>{ const p=randSpawnPos(); const e=spawnEnemy(tp,p.x,p.y); if(e) e.spawning=true; });
   run.phase='intermission'; run.timer=INTERMISSION_MS;
   updateHud();
@@ -84,7 +94,7 @@ function nextWave(){ run.level++; beginWave(); }
 
 // Reset the arena for a fresh start of either mode.
 function resetArena(){
-  shells.length=0; particles.length=0; smoke.length=0; enemies.length=0;
+  shells.length=0; particles.length=0; smoke.length=0; mines.length=0; tracks.length=0; enemies.length=0;
   tank.x=W*0.16; tank.y=H*0.6; tank.vx=0; tank.vy=0;
   tank.bodyAngle=0; tank.turretAngle=-Math.PI/2; tank.aimTarget=tank.turretAngle;
   tank.team='player'; tank.lastFire=0; tank.fireSlowUntil=0; tank.maxHp=run.maxHp; tank.hp=run.maxHp;

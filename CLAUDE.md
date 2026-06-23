@@ -23,14 +23,15 @@ The repo holds **two separate builds** of the game, plus the feel baseline:
   wave 1 = Browns only, 3 HP, death→menu; level/kills/hp HUD). Landscape-first (portrait shows a
   rotate overlay + `orientation.lock` attempt).
   Settings = the same tuning panel, opened from the menu and the in-game gear.
-  **T0 + M2 enemy AI is in** (`data/types.js` `TYPES` + multi-tank combat base): `enemies[]`,
-  team-tagged shells, `spawnEnemy`, generic `fire(t,aim)` (player feel unchanged via `?? cfg`
-  fallback), `driveEnemy` with `track`/`none`/**`predict`** aim (`aimFor` leads the target;
-  `bankAim`/`segBlocked` do approximate 1-bounce bank shots around cover). **Green** sniper works;
-  **rocket shells** render elongated with a flame (shell `rocket` flag). Wave composition is a
-  `WAVES` table (procedural at 8+). **TODO (M3):** mines (Yellow/Purple/Black), true invisibility
-  (White) — both data-ready; Yellow/White held out of the wave table until then. See
-  `ENEMY-TYPES-SPRINT.md`.
+  **Full enemy roster done (T0–M3, T11 dodging skipped).** `data/types.js` `TYPES` + multi-tank
+  combat base: `enemies[]`, team-tagged shells, `spawnEnemy`, generic `fire(t,aim)` (player feel
+  unchanged via `?? cfg`). `driveEnemy` aim modes: `track`/`none`/`cutoff` (half-lead, Purple)/
+  `predict` (`aimFor` + `bankAim`/`segBlocked` for 1-bounce bank shots, Green). **Mines** (`mines[]`,
+  `layMine`/`updateMines`/`detonate` — arm/fuse/proximity/chain, shell-style team rules). **White**
+  cloaks on round start (`SFX.electric`, fades to ~0.06 alpha; revealed by muzzle flash + tread
+  marks). **Tread marks** (`tracks[]`, fade, cleared between levels). **Rocket shells** render
+  elongated. `WAVES` composition table (procedural at 8+). Audio: `audio.js` (lazy Web Audio,
+  `cfg.sound`). See `ENEMY-TYPES-SPRINT.md`.
   **Input/feel options** (in the ⚙ panel): floating vs **fixed stick** (centers are player-defined
   via a 2-tap calibration overlay, stored as W/H fractions), **auto-fire** (push the aim stick past
   the ring to fire on cooldown), **fire-slow** (firing brakes movement by `fireSlow` px/s for

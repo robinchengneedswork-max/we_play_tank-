@@ -39,6 +39,7 @@
   <div class="row"><label>Max shells on screen<span id="vMax"></span></label><input id="maxshell" type="range" min="1" max="8" step="1"></div>
   <div class="toggle"><span>Aim trajectory preview</span><input id="preview" type="checkbox"></div>
   <div class="toggle"><span>Haptics</span><input id="haptics" type="checkbox"></div>
+  <div class="toggle"><span>Sound</span><input id="sound" type="checkbox"></div>
   <div class="toggle"><span>Screen shake</span><input id="shake" type="checkbox"></div>
   <hr class="panel-sep">
   <div class="toggle"><span>Fixed stick</span><input id="fixedStick" type="checkbox"></div>
@@ -69,6 +70,7 @@
 
 <!-- Load order = dependency order (modules share global scope, no bundler). -->
 <script src="src/config.js"></script>
+<script src="src/audio.js"></script>
 <script src="src/data/types.js"></script>
 <script src="src/state.js"></script>
 <script src="src/input.js"></script>

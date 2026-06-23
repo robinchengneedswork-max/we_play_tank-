@@ -12,7 +12,7 @@ const ctx = cv.getContext('2d');
 // earmarked as run upgrades, and turret lag couples to fire-on-release accuracy.
 const DEFAULTS = {
   move:180, turret:0.35, body:0.18, shell:310, bounce:2,
-  cd:260, dz:26, rad:80, maxshell:5, preview:true, haptics:true, shake:true,
+  cd:260, dz:26, rad:80, maxshell:5, preview:true, haptics:true, shake:true, sound:true,
   fixedStick:false, autofire:false,           // input prefs (persisted)
   fireSlow:90, fireSlowMs:250,                 // firing brakes movement
   moveCx:0.20, moveCy:0.70, aimCx:0.80, aimCy:0.70  // fixed-stick centers (fractions of W,H)

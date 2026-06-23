@@ -15,7 +15,7 @@ const binds=[['move','vMove',v=>v],['turret','vTurret',v=>(+v).toFixed(2)],
   ['body','vBody',v=>(+v).toFixed(2)],['shell','vShell',v=>v],['bounce','vBounce',v=>v],
   ['cd','vCd',v=>v],['dz','vDz',v=>v],['rad','vRad',v=>v],['maxshell','vMax',v=>v],
   ['fireSlow','vFireSlow',v=>v],['fireSlowMs','vFireSlowMs',v=>v]];
-const TOGGLES=['preview','haptics','shake','fixedStick','autofire'];
+const TOGGLES=['preview','haptics','sound','shake','fixedStick','autofire'];
 function syncPanel(){
   binds.forEach(([id,lbl,fmt])=>{const el=document.getElementById(id);
     el.value=cfg[id]; document.getElementById(lbl).textContent=fmt(cfg[id]);});

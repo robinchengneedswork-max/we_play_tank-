@@ -64,10 +64,29 @@ function render(){
   // frame
   ctx.strokeStyle=getCSS('--frame');ctx.lineWidth=6;
   ctx.strokeRect(FRAME-3,FRAME-3,W-2*FRAME+6,H-2*FRAME+6);
+  // tread marks (on the floor, under everything)
+  ctx.fillStyle='#5a5346';
+  for(const tr of tracks){
+    ctx.globalAlpha=Math.max(0,(tr.life/tr.max)*0.26);
+    ctx.save();ctx.translate(tr.x,tr.y);ctx.rotate(tr.a);
+    ctx.fillRect(-3,-9,6,3); ctx.fillRect(-3,6,6,3);
+    ctx.restore();
+  }
+  ctx.globalAlpha=1;
   // obstacles
   for(const o of obstacles){
     ctx.fillStyle=getCSS('--slate');ctx.fillRect(o.x,o.y,o.w,o.h);
     ctx.fillStyle=getCSS('--slate-top');ctx.fillRect(o.x,o.y,o.w,5);
+  }
+  // mines
+  for(const m of mines){
+    const armed=m.arm<=0;
+    if(armed){ ctx.globalAlpha=0.10;ctx.fillStyle='#d9483b';
+      ctx.beginPath();ctx.arc(m.x,m.y,m.blast,0,7);ctx.fill(); }   // faint blast radius hint
+    ctx.globalAlpha = armed ? (0.6+0.4*Math.sin(performance.now()/120)) : 0.45;
+    ctx.fillStyle = armed ? '#d9483b' : '#9b7b4a';
+    ctx.beginPath();ctx.arc(m.x,m.y, armed?5:4,0,7);ctx.fill();
+    ctx.globalAlpha=1;
   }
   drawPreview();
   // smoke trails (behind everything that moves)
@@ -85,7 +104,13 @@ function render(){
       ctx.globalAlpha=0.7; ctx.beginPath();ctx.arc(e.x,e.y,e.r+8,0,7);
       ctx.strokeStyle=e.color;ctx.lineWidth=2;ctx.setLineDash([4,5]);ctx.stroke();ctx.setLineDash([]);
     } else {
-      ctx.globalAlpha = e.invisible ? 0.22 : 1;  // TODO(M3): true invisibility + muzzle-flash reveal
+      let alpha=1;
+      if(e.invisible){                            // White: fade to near-invisible on round start
+        const el = e.cloakStart ? performance.now()-e.cloakStart : 9999;
+        alpha = el<450 ? 1-(el/450)*0.94 : 0.06;  // 1 → 0.06 over 450ms
+        if(performance.now()-(e.lastFire||0) < 150) alpha=Math.max(alpha,0.85); // muzzle flash reveal
+      }
+      ctx.globalAlpha=alpha;
       drawTank(e, e.color, darken(e.color,0.6));
     }
     ctx.globalAlpha = 1;

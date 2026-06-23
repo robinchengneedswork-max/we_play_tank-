@@ -102,6 +102,16 @@ waves introduce teal/red/green, counts ramp.
 
 ## Milestone 3 — Area denial & specials (biggest lift) · ~13 pts
 
+> **STATUS: M3 done in `web/` (2026-06-23), except T11 (dodging) skipped.** T8 mines (`mines[]`,
+> `layMine`, `updateMines`/`detonate` in logic.js — arm 1s, fuse 6s, proximity trigger, blast with
+> shell-style team rules, chain detonation; mine-layers drop on a timer while moving, capped at
+> `mines`). T9 Purple (`aim:'cutoff'` = half-lead), Yellow (mine-focused) & Black work. T10 White:
+> spawns visible during the warp-in, then on round start plays `SFX.electric` and fades to ~0.06
+> alpha; revealed by muzzle flash (150ms after firing) and by **tread marks**. New: `web/src/audio.js`
+> (lazy Web Audio SFX: electric/mineLay/mineBoom; `cfg.sound` toggle). **Tread marks** for all tanks
+> (`tracks[]`, fade ~5s, cleared between levels in `beginWave`). Roster complete; T11 enemy dodging
+> left as the optional stretch.
+
 **T8 — Mines** · 5 pts — new `mines[]` array + `layMine(t)`. Mine: position, owner team, `arm`
 timer (~1s, harmless while arming), `fuse` (~5s) then explode; explodes early if any tank enters
 blast radius. Explosion kills tanks in radius (respect team rules / friendly-fire as with shells) and

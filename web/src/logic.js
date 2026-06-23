@@ -59,13 +59,17 @@ function bankAim(e,tx,ty){
   }
   return null;
 }
-// chosen aim angle for an enemy: 'track' = direct to player; 'predict' = lead, with a
-// bank fallback when cover blocks the lead point.
+// chosen aim angle for an enemy.
+//   'track'  = straight at the player's current position.
+//   'cutoff' = partial lead (aim slightly ahead of the player's path; rushers like Purple).
+//   'predict'= full intercept lead, with a 1-bounce bank fallback around cover (Green).
 function aimFor(e){
   if(e.aim==='track') return Math.atan2(tank.y-e.y, tank.x-e.x);
-  // predict: iterate intercept from player velocity + shell speed (2x for stability)
-  const speed=e.shellSpeed||cfg.shell; let tx=tank.x,ty=tank.y;
-  for(let k=0;k<2;k++){ const d=Math.hypot(tx-e.x,ty-e.y), t=d/speed; tx=tank.x+tank.vx*t; ty=tank.y+tank.vy*t; }
+  const speed=e.shellSpeed||cfg.shell;
+  const lead = e.aim==='cutoff' ? 0.5 : 1;          // cutoff leads only halfway
+  let tx=tank.x,ty=tank.y;
+  for(let k=0;k<2;k++){ const d=Math.hypot(tx-e.x,ty-e.y), t=d/speed*lead; tx=tank.x+tank.vx*t; ty=tank.y+tank.vy*t; }
+  if(e.aim==='cutoff') return Math.atan2(ty-e.y, tx-e.x);   // rushers don't bother banking
   if(!segBlocked(e.x,e.y,tx,ty)) return Math.atan2(ty-e.y, tx-e.x);
   const bank=bankAim(e,tx,ty);
   return bank!==null ? bank : Math.atan2(ty-e.y, tx-e.x);
@@ -91,6 +95,12 @@ function driveEnemy(e, now){
     let td=((aimAng-e.turretAngle+Math.PI)%(2*Math.PI))-Math.PI; e.turretAngle+=td*0.07;
     if(now>=e.nextFireAt){ fire(e, e.turretAngle); scheduleFire(e,now); }
   }
+  // mine-layers drop mines on a timer while on the move (up to their `mines` cap)
+  if(e.mines>0 && e.speed>0 && now>=e.nextMineAt){
+    let own=0; for(const m of mines) if(m.owner===e && !m.dead) own++;
+    if(own<e.mines && (Math.abs(e.vx)+Math.abs(e.vy))>20){ layMine(e); SFX.mineLay(); }
+    e.nextMineAt = now + 1400 + Math.random()*2200;
+  }
 }
 function moveEnemy(e,dt){
   e.x+=e.vx*dt; e.y+=e.vy*dt;
@@ -102,6 +112,36 @@ function moveEnemy(e,dt){
     const dx=e.x-cx, dy=e.y-cy, d=Math.hypot(dx,dy);
     if(d<e.r){ const nx=dx/(d||1),ny=dy/(d||1); e.x=cx+nx*e.r; e.y=cy+ny*e.r; }
   }
+}
+
+// ---- tread marks: dropped while moving; fade out; cleared between levels ----
+function trailTank(t,dt){
+  const sp=Math.hypot(t.vx,t.vy); if(sp<8) return;
+  t._trackAcc=(t._trackAcc||0)+sp*dt;
+  if(t._trackAcc>=14){ t._trackAcc=0; tracks.push({x:t.x,y:t.y,a:t.bodyAngle,life:5,max:5}); }
+}
+
+// ---- mines: arm → fuse / proximity → explode (team rules like shells) + chain ----
+function near(a,b,r){ return Math.hypot(a.x-b.x,a.y-b.y)<r; }
+function updateMines(dt){
+  for(const m of mines){
+    if(m.dead) continue;
+    if(m.arm>0) m.arm-=dt;
+    m.fuse-=dt;
+    if(m.fuse<=0){ detonate(m); continue; }
+    if(m.arm<=0){                              // armed: trigger on an opposing tank nearby
+      if(m.team!=='player' && near(tank,m,m.blast*0.6)) { detonate(m); continue; }
+      for(const e of enemies){ if(!e.spawning && m.team!==e.team && near(e,m,m.blast*0.6)){ detonate(m); break; } }
+    }
+  }
+  for(let i=mines.length-1;i>=0;i--) if(mines[i].dead) mines.splice(i,1);
+}
+function detonate(m){
+  if(m.dead) return; m.dead=true;
+  SFX.mineBoom(); burst(m.x,m.y,'#e8a23a',22); if(cfg.shake) shake=Math.min(shake+9,13);
+  if(m.team!=='player' && near(tank,m,m.blast)) damageTank(tank,1);
+  for(const e of [...enemies]){ if(m.team!==e.team && !e.spawning && near(e,m,m.blast)) damageTank(e,1); }
+  for(const o of mines){ if(!o.dead && near(o,m,m.blast)) detonate(o); }   // chain
 }
 
 // ---- physics ----
@@ -152,15 +192,19 @@ function update(dt){
     let d=((tank.aimTarget-tank.turretAngle+Math.PI)%(2*Math.PI))-Math.PI;
     tank.turretAngle+=d*cfg.turret;
   }
+  trailTank(tank,dt);
   // auto-fire: hold the aim stick past the ring to keep firing on cooldown
   if(cfg.autofire){ const ap=activePointer('aim'); if(ap && stickVec(ap).raw>cfg.rad) tryFire(); }
   // ---- wave intermission (breather + countdown while enemies warp in) ----
   if(gameMode==='roguelike' && run.phase==='intermission'){
     run.timer-=dt*1000;
-    if(run.timer<=0){ run.phase='fighting'; for(const e of enemies) e.spawning=false; }
+    if(run.timer<=0){
+      run.phase='fighting';
+      for(const e of enemies){ e.spawning=false; if(e.invisible){ SFX.electric(); e.cloakStart=now; } } // White cloaks on round start
+    }
   }
   // ---- enemies (inert while warping in) ----
-  for(const e of enemies){ if(e.spawning) continue; driveEnemy(e, now); moveEnemy(e, dt); }
+  for(const e of enemies){ if(e.spawning) continue; driveEnemy(e, now); moveEnemy(e, dt); trailTank(e,dt); }
   // ---- shells ----
   for(let i=shells.length-1;i>=0;i--){
     const sh=shells[i]; sh.life-=dt; if(sh.life<=0){shells.splice(i,1);continue;}
@@ -178,9 +222,13 @@ function update(dt){
     if(dead){ shells.splice(i,1); continue; }
     addSmoke(sh.x,sh.y);   // trail behind surviving shells
   }
+  // mines
+  updateMines(dt);
   // smoke trails
   for(let i=smoke.length-1;i>=0;i--){const s=smoke[i];s.life-=dt;
     if(s.life<=0){smoke.splice(i,1);continue;} s.x+=s.vx*dt;s.y+=s.vy*dt;s.vx*=0.92;s.vy*=0.92;}
+  // tread marks
+  for(let i=tracks.length-1;i>=0;i--){ tracks[i].life-=dt; if(tracks[i].life<=0) tracks.splice(i,1); }
   // particles
   for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.life-=dt;
     if(p.life<=0){particles.splice(i,1);continue;} p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=0.9;p.vy*=0.9;}
