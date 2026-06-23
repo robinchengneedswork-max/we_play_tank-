@@ -97,14 +97,16 @@ function randSpawnPos(){
 // cells when it has them, falling back to anywhere valid (never on block/hole/player).
 function enemySpawnPos(){
   const hints=(currentMap&&currentMap.enemyCells)||[];
-  for(let t=0;t<40;t++){
+  for(let t=0;t<46;t++){
     let x,y;
     if(hints.length && t<20){ const p=cellToPx(hints[(Math.random()*hints.length)|0]);
-      x=p.x+(Math.random()-0.5)*80; y=p.y+(Math.random()-0.5)*80; }
+      x=p.x+(Math.random()-0.5)*120; y=p.y+(Math.random()-0.5)*120; }   // wide jitter spreads hint clusters
     else { x=FRAME+30+Math.random()*(W-2*FRAME-60); y=FRAME+30+Math.random()*(H-2*FRAME-60); }
     if(Math.hypot(x-tank.x,y-tank.y)<170) continue;
     const onTerrain=o=>x>o.x-22&&x<o.x+o.w+22&&y>o.y-22&&y<o.y+o.h+22;
     if(blockRects.some(onTerrain)||holeRects.some(onTerrain)||crates.some(onTerrain)) continue;
+    const space = t<34 ? 100 : 45;     // keep tanks well apart; relax late so we always find a spot
+    if(enemies.some(o=>(o.x||o.y)&&Math.hypot(x-o.x,y-o.y)<space)) continue;
     return {x,y};
   }
   return randSpawnPos();

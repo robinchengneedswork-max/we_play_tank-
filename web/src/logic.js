@@ -48,6 +48,19 @@ function addSmoke(x,y){
 
 // ---- enemy AI ----
 function scheduleFire(e,now){ e.nextFireAt = now + e.fireGap[0] + Math.random()*(e.fireGap[1]-e.fireGap[0]); }
+// Basic fire discipline: would a shot along `aim` immediately pass through a teammate?
+// (Ricochet friendly fire is still possible — that's the Wii flavor — but no point-blank
+// teammate kills.) Projects each ally onto the aim ray; hold fire if one is in the lane.
+function allyInLineOfFire(e, aim){
+  const cx=Math.cos(aim), cy=Math.sin(aim);
+  for(const o of enemies){
+    if(o===e || o.spawning) continue;
+    const dx=o.x-e.x, dy=o.y-e.y, t=dx*cx+dy*cy;     // distance along the aim ray
+    if(t<=0 || t>320) continue;                       // behind us or too far to matter
+    if(Math.abs(dx*cy-dy*cx) < o.r+7) return true;    // within the ally's width of the lane
+  }
+  return false;
+}
 
 // is the straight segment a→b crossed by an obstacle? (sampled — cheap & good enough)
 function segBlocked(x0,y0,x1,y1){
@@ -148,11 +161,11 @@ function driveEnemy(e, now){
       e.wanderUntil=now+700+Math.random()*1500;
     }
     let wd=((e.wanderTarget-e.turretAngle+Math.PI)%(2*Math.PI))-Math.PI; e.turretAngle+=wd*0.04;
-    if(now>=e.nextFireAt){ fire(e, e.turretAngle); scheduleFire(e,now); }
+    if(now>=e.nextFireAt){ if(!allyInLineOfFire(e,e.turretAngle)) fire(e, e.turretAngle); scheduleFire(e,now); }
   } else {
     const aimAng=aimFor(e);
     let td=((aimAng-e.turretAngle+Math.PI)%(2*Math.PI))-Math.PI; e.turretAngle+=td*0.07;
-    if(now>=e.nextFireAt){ fire(e, e.turretAngle); scheduleFire(e,now); }
+    if(now>=e.nextFireAt){ if(!allyInLineOfFire(e,e.turretAngle)) fire(e, e.turretAngle); scheduleFire(e,now); }
   }
   // mine-layers drop mines on a timer while on the move (up to their `mines` cap)
   if(e.mines>0 && e.speed>0 && now>=e.nextMineAt){
@@ -496,8 +509,14 @@ function completeSiege(){          // held long enough → attackers break off; 
   enemies.length=0; shells.length=0;
   finishWave();
 }
-// Wave cleared: only open the upgrade pick if you've banked enough scrap; else roll on.
-function finishWave(){ if(run.scrap>=upgradeCost()) offerUpgrade(); else nextWave(); }
+// Wave cleared: auto-sweep any scrap still on the field (a beaten level never
+// wastes it), then only open the upgrade pick if you can afford it; else roll on.
+function finishWave(){
+  let got=0;
+  for(let i=pickups.length-1;i>=0;i--) if(pickups[i].kind==='scrap'){ run.scrap+=pickups[i].value; got+=pickups[i].value; pickups.splice(i,1); }
+  if(got>0){ SFX.hit(); updateHud(); }
+  if(run.scrap>=upgradeCost()) offerUpgrade(); else nextWave();
+}
 function updateSiege(dt, now){
   if(!run.siege || run.phase!=='fighting' || run.siege.phase!=='hold') return;
   if(inHoldZone(tank)) run.siege.timer-=dt*1000;        // KotH: clock only ticks while you hold the point
