@@ -33,6 +33,15 @@ not buffing one. Source research: see chat / `CLAUDE.md` open question #3.
 
 ## Enabling refactor (do first — everything depends on it)
 
+> **STATUS: T0 done in `web/` (2026-06-23).** Note this sprint was written against `lan/host.html`,
+> but the roguelike now lives in the `web/` single-player build, which had *no* combat to start
+> from. So T0 in `web/` also brought in the whole multi-tank combat base: `enemies[]`, team-tagged
+> shells (`{team,owner}`), shell↔tank damage, enemy death, player HP. Files: `web/src/data/types.js`
+> (full 9-type `TYPES` table), `spawnEnemy`/wave+sandbox spawners in `state.js`, generic
+> `fire(t,aim)` + base `driveEnemy` (track/none) in `logic.js`, `drawTank` in `render.js`.
+> Brown & Grey fully match their rows; the other types already move/fire via their stats through the
+> generic AI. Still TODO: `predict` aim (M2), mines & true invisibility (M3) — data is in place.
+
 **T0 — Per-tank stats + `TYPES` table** · 3 pts
 - Add a `TYPES` object keyed by type name, each with: `color, speed, shellSpeed, bounce, cd,
   maxShells, rocket, aim ('none'|'track'|'predict'), engage (hold distance), mines, invisible,

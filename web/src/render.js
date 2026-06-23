@@ -1,5 +1,5 @@
 "use strict";
-// render — reads state, draws the board, tank, shells, particles, sticks. No mutation.
+// render — reads state, draws the board, tanks, shells, particles, sticks. No mutation.
 
 function drawStick(p,color){
   if(!p)return; const s=stickVec(p);
@@ -22,10 +22,29 @@ function drawPreview(){
   for(let i=0;i<260;i++){
     const r=reflectStep(g,0,0,sdt); g.x=r.x;g.y=r.y;g.vx=r.vx;g.vy=r.vy;
     if(r.hit){g.b--; if(g.b<0)break;}
-    if(targets.some(t=>Math.hypot(g.x-t.x,g.y-t.y)<t.r+4))break;
+    if(enemies.some(e=>Math.hypot(g.x-e.x,g.y-e.y)<e.r+4))break;
     ctx.lineTo(g.x,g.y);
   }
   ctx.stroke();ctx.restore();
+}
+// darken a #rrggbb by factor f (0..1) → rgb() string, for tank turret/track shading.
+function darken(hex,f){
+  const n=parseInt(hex.slice(1),16);
+  return 'rgb('+Math.round(((n>>16)&255)*f)+','+Math.round(((n>>8)&255)*f)+','+Math.round((n&255)*f)+')';
+}
+function drawTank(t,col,colDark){
+  ctx.save();ctx.translate(t.x,t.y);
+  ctx.save();ctx.rotate(t.bodyAngle);
+  ctx.fillStyle=colDark;ctx.fillRect(-t.r-2,-t.r+1,t.r*2+4,5);
+  ctx.fillRect(-t.r-2,t.r-6,t.r*2+4,5);
+  ctx.fillStyle=col;ctx.fillRect(-t.r,-t.r+3,t.r*2,t.r*2-6);
+  ctx.restore();
+  // turret
+  ctx.rotate(t.turretAngle);
+  ctx.fillStyle=colDark;ctx.fillRect(0,-4,t.r+12,8);
+  ctx.beginPath();ctx.arc(0,0,9,0,7);ctx.fill();
+  ctx.fillStyle=col;ctx.beginPath();ctx.arc(0,0,6,0,7);ctx.fill();
+  ctx.restore();
 }
 function render(){
   ctx.save();
@@ -45,32 +64,19 @@ function render(){
     ctx.fillStyle=getCSS('--slate-top');ctx.fillRect(o.x,o.y,o.w,5);
   }
   drawPreview();
-  // targets
-  for(const t of targets){
-    const pulse=1+Math.sin(t.t*5)*0.06;
-    ctx.save();ctx.translate(t.x,t.y);ctx.scale(pulse,pulse);
-    ctx.beginPath();ctx.arc(0,0,t.r,0,7);ctx.fillStyle=getCSS('--enemy');ctx.fill();
-    ctx.beginPath();ctx.arc(0,0,t.r*0.45,0,7);ctx.fillStyle='rgba(255,255,255,.85)';ctx.fill();
-    ctx.restore();
+  // enemies
+  for(const e of enemies){
+    ctx.globalAlpha = e.invisible ? 0.22 : 1;   // TODO(M3): true invisibility + muzzle-flash reveal
+    drawTank(e, e.color, darken(e.color,0.6));
+    ctx.globalAlpha = 1;
   }
   // shells
   for(const sh of shells){ctx.beginPath();ctx.arc(sh.x,sh.y,5,0,7);ctx.fillStyle=getCSS('--shell');ctx.fill();}
   // particles
   for(const p of particles){ctx.globalAlpha=Math.max(0,p.life*3);ctx.fillStyle=p.c;
     ctx.beginPath();ctx.arc(p.x,p.y,3,0,7);ctx.fill();ctx.globalAlpha=1;}
-  // tank
-  ctx.save();ctx.translate(tank.x,tank.y);
-  ctx.save();ctx.rotate(tank.bodyAngle);
-  ctx.fillStyle=getCSS('--tank-dark');ctx.fillRect(-tank.r-2,-tank.r+1,tank.r*2+4,5);
-  ctx.fillRect(-tank.r-2,tank.r-6,tank.r*2+4,5);
-  ctx.fillStyle=getCSS('--tank');ctx.fillRect(-tank.r,-tank.r+3,tank.r*2,tank.r*2-6);
-  ctx.restore();
-  // turret
-  ctx.rotate(tank.turretAngle);
-  ctx.fillStyle=getCSS('--tank-dark');ctx.fillRect(0,-4,tank.r+12,8);
-  ctx.beginPath();ctx.arc(0,0,9,0,7);ctx.fill();
-  ctx.fillStyle=getCSS('--tank');ctx.beginPath();ctx.arc(0,0,6,0,7);ctx.fill();
-  ctx.restore();
+  // player tank (drawn last, on top)
+  drawTank(tank, getCSS('--tank'), getCSS('--tank-dark'));
   ctx.restore();
   // sticks
   drawStick(activePointer('move'),getCSS('--tank'));

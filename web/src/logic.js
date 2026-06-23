@@ -1,19 +1,65 @@
 "use strict";
-// logic — firing, shell physics, per-frame world update, scoring.
+// logic — firing, enemy AI, shell physics, per-frame world update, combat resolution.
 
-function tryFire(){
+// Generic fire: any tank shoots along `aim`. Reads per-tank stats, falling back
+// to cfg for tanks that don't define them (i.e. the player) — so player feel is
+// unchanged. tryFire() is the player's wrapper.
+function fire(t, aim){
   const now=performance.now();
-  if(now-lastFire<cfg.cd) return;
-  if(shells.length>=cfg.maxshell) return;
-  lastFire=now;
-  const a=tank.turretAngle;
-  const tipX=tank.x+Math.cos(a)*(tank.r+10);
-  const tipY=tank.y+Math.sin(a)*(tank.r+10);
-  shells.push({x:tipX,y:tipY,vx:Math.cos(a)*cfg.shell,vy:Math.sin(a)*cfg.shell,b:cfg.bounce,life:3.2});
-  for(let i=0;i<6;i++){const sp=60+Math.random()*120,ang=a+(Math.random()-0.5)*0.7;
+  const cd        = t.cd        ?? cfg.cd;
+  const maxShells = t.maxShells ?? cfg.maxshell;
+  const speed     = t.shellSpeed?? cfg.shell;
+  const bounce    = t.bounce    ?? cfg.bounce;
+  if(now-(t.lastFire||0) < cd) return;
+  let own=0; for(const s of shells) if(s.owner===t) own++;
+  if(own>=maxShells) return;
+  t.lastFire=now;
+  const tipX=t.x+Math.cos(aim)*(t.r+10);
+  const tipY=t.y+Math.sin(aim)*(t.r+10);
+  shells.push({x:tipX,y:tipY,vx:Math.cos(aim)*speed,vy:Math.sin(aim)*speed,b:bounce,life:3.2,team:t.team,owner:t});
+  for(let i=0;i<6;i++){const sp=60+Math.random()*120,ang=aim+(Math.random()-0.5)*0.7;
     particles.push({x:tipX,y:tipY,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,life:0.25,c:'#e8b24a'});}
-  if(cfg.shake) shake=Math.min(shake+5,9);
-  if(cfg.haptics&&navigator.vibrate) navigator.vibrate(18);
+  if(t.team==='player'){
+    if(cfg.shake) shake=Math.min(shake+5,9);
+    if(cfg.haptics&&navigator.vibrate) navigator.vibrate(18);
+  }
+}
+function tryFire(){ fire(tank, tank.turretAngle); }
+
+// ---- enemy AI (base: seek-to-engage + track/none aim). predict/mines/invisible = TODO M2/M3 ----
+function scheduleFire(e,now){ e.nextFireAt = now + e.fireGap[0] + Math.random()*(e.fireGap[1]-e.fireGap[0]); }
+function driveEnemy(e, now){
+  const dx=tank.x-e.x, dy=tank.y-e.y, dist=Math.hypot(dx,dy)||1;
+  // movement: hold a band around `engage`
+  if(e.speed>0){
+    const ux=dx/dist, uy=dy/dist;
+    if(dist>e.engage+20){ e.vx=ux*e.speed; e.vy=uy*e.speed; }
+    else if(dist<e.engage-20){ e.vx=-ux*e.speed; e.vy=-uy*e.speed; }
+    else { e.vx*=0.85; e.vy*=0.85; }
+    if(Math.abs(e.vx)+Math.abs(e.vy)>1){
+      const md=Math.atan2(e.vy,e.vx); let bd=((md-e.bodyAngle+Math.PI)%(2*Math.PI))-Math.PI; e.bodyAngle+=bd*0.1;
+    }
+  } else { e.vx=0; e.vy=0; }
+  // aim + fire
+  if(e.aim==='none'){
+    // brown: lazy, doesn't track — occasional loose shot
+    if(now>=e.nextFireAt){ fire(e, Math.random()*Math.PI*2); scheduleFire(e,now); }
+  } else {
+    const toAng=Math.atan2(dy,dx);          // TODO(M2): 'predict' should lead the target
+    let td=((toAng-e.turretAngle+Math.PI)%(2*Math.PI))-Math.PI; e.turretAngle+=td*0.07;
+    if(now>=e.nextFireAt){ fire(e, e.turretAngle); scheduleFire(e,now); }
+  }
+}
+function moveEnemy(e,dt){
+  e.x+=e.vx*dt; e.y+=e.vy*dt;
+  e.x=Math.max(FRAME+e.r,Math.min(W-FRAME-e.r,e.x));
+  e.y=Math.max(FRAME+e.r,Math.min(H-FRAME-e.r,e.y));
+  for(const o of obstacles){
+    const cx=Math.max(o.x,Math.min(e.x,o.x+o.w));
+    const cy=Math.max(o.y,Math.min(e.y,o.y+o.h));
+    const dx=e.x-cx, dy=e.y-cy, d=Math.hypot(dx,dy);
+    if(d<e.r){ const nx=dx/(d||1),ny=dy/(d||1); e.x=cx+nx*e.r; e.y=cy+ny*e.r; }
+  }
 }
 
 // ---- physics ----
@@ -38,7 +84,8 @@ function reflectStep(o,nx,ny,dt){
 }
 
 function update(dt){
-  // movement
+  const now=performance.now();
+  // ---- player movement ----
   const mp=activePointer('move');
   if(mp){ const s=stickVec(mp); const n=s.mag/cfg.rad;
     tank.vx=Math.cos(s.ang)*cfg.move*n; tank.vy=Math.sin(s.ang)*cfg.move*n;
@@ -61,15 +108,20 @@ function update(dt){
     let d=((tank.aimTarget-tank.turretAngle+Math.PI)%(2*Math.PI))-Math.PI;
     tank.turretAngle+=d*cfg.turret;
   }
-  // shells
+  // ---- enemies ----
+  for(const e of enemies){ driveEnemy(e, now); moveEnemy(e, dt); }
+  // ---- shells ----
   for(let i=shells.length-1;i>=0;i--){
     const sh=shells[i]; sh.life-=dt; if(sh.life<=0){shells.splice(i,1);continue;}
     const steps=4, sdt=dt/steps; let dead=false;
     for(let k=0;k<steps;k++){
       const r=reflectStep(sh,0,0,sdt); sh.x=r.x;sh.y=r.y;sh.vx=r.vx;sh.vy=r.vy;
       if(r.hit){ sh.b--; if(sh.b<0){dead=true;break;} }
-      for(const tg of targets){ if(Math.hypot(sh.x-tg.x,sh.y-tg.y)<tg.r+4){
-        hitTarget(tg); dead=true; break; } }
+      // hit an opposing tank?
+      let victim=null;
+      if(sh.team!=='player' && Math.hypot(sh.x-tank.x,sh.y-tank.y)<tank.r+4) victim=tank;
+      if(!victim){ for(const e of enemies){ if(sh.team!==e.team && Math.hypot(sh.x-e.x,sh.y-e.y)<e.r+4){ victim=e; break; } } }
+      if(victim){ damageTank(victim,1); dead=true; break; }
       if(dead)break;
     }
     if(dead) shells.splice(i,1);
@@ -77,20 +129,42 @@ function update(dt){
   // particles
   for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.life-=dt;
     if(p.life<=0){particles.splice(i,1);continue;} p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=0.9;p.vy*=0.9;}
-  // targets gentle pulse
-  targets.forEach(t=>t.t+=dt);
   if(shake>0) shake=Math.max(0,shake-dt*30);
 }
-function hitTarget(tg){
-  score++;
-  if(gameMode==='roguelike'){            // run progression scaffold
-    run.kills++;
-    if(run.kills % 10 === 0) run.level++; // TODO: replace with real wave clears / upgrade picks
+
+// ---- combat resolution ----
+function burst(x,y,color,n){
+  for(let i=0;i<n;i++){const sp=80+Math.random()*200,a=Math.random()*Math.PI*2;
+    particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:0.4,c:color});}
+}
+function damageTank(t, dmg){
+  if(t.team==='player'){
+    burst(t.x,t.y,'#ffffff',12);
+    if(cfg.shake) shake=Math.min(shake+8,12);
+    if(cfg.haptics&&navigator.vibrate) navigator.vibrate([18,40,18]);
+    if(gameMode==='roguelike'){           // sandbox player is immortal (feedback only)
+      t.hp-=dmg; run.hp=Math.max(0,t.hp); updateHud();
+      if(t.hp<=0) onPlayerDeath();
+    }
+  } else {
+    t.hp-=dmg;
+    burst(t.x,t.y,t.color,10);
+    if(cfg.shake) shake=Math.min(shake+4,9);
+    if(t.hp<=0) killEnemy(t);
   }
-  updateHud();
-  for(let i=0;i<14;i++){const sp=80+Math.random()*200,a=Math.random()*Math.PI*2;
-    particles.push({x:tg.x,y:tg.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:0.4,c:'#c0584a'});}
-  if(cfg.shake) shake=Math.min(shake+7,11);
-  if(cfg.haptics&&navigator.vibrate) navigator.vibrate([12,30,12]);
-  placeTarget(tg);
+}
+function killEnemy(e){
+  const i=enemies.indexOf(e); if(i<0) return;
+  enemies.splice(i,1);
+  score++;
+  burst(e.x,e.y,e.color,16);
+  if(cfg.shake) shake=Math.min(shake+6,11);
+  if(cfg.haptics&&navigator.vibrate) navigator.vibrate([12,28,12]);
+  if(gameMode==='roguelike'){ run.kills++; updateHud(); if(enemies.length===0) nextWave(); }
+  else if(gameMode==='sandbox'){ updateHud(); const p=randSpawnPos(); spawnEnemy(e.type,p.x,p.y); }
+}
+function onPlayerDeath(){
+  // TODO: proper game-over / run-summary screen. For now, bounce to the menu.
+  started=false;
+  toMenu();
 }

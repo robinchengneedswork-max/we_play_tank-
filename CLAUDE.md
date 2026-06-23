@@ -17,11 +17,13 @@ The repo holds **two separate builds** of the game, plus the feel baseline:
   `web/src/{config,state,input,logic,render,ui,menu,main}.js` + `index.html` + `style.css`. No
   `audio.js` yet — the reference has haptics only, no synthesized sound (known gap vs the LAN host).
   Has a **menu/screen system** (`menu.js`, `.screen`/`.active` + `showScreen`) with two modes
-  (`gameMode` in config): **Sandbox** (free-play testbed for upcoming weapons/upgrades) and
-  **Roguelike** (`run` state scaffold in `state.js` — level/kills/hp HUD; `resetRun`/`resetArena`).
-  Settings = the same tuning panel, opened from the menu and the in-game gear. **Both modes share
-  today's target-range arena** — there's no enemy AI in `web/` yet (that's the T0 sprint); the run
-  system (waves, upgrade picks, permadeath) is scaffolded with `TODO` hooks, not built.
+  (`gameMode` in config): **Sandbox** (respawning test range of enemy types) and **Roguelike**
+  (`run` state in `state.js` — escalating waves, 3 HP, death→menu; level/kills/hp HUD).
+  Settings = the same tuning panel, opened from the menu and the in-game gear.
+  **T0 enemy roster is in** (`data/types.js` `TYPES` + multi-tank combat base): `enemies[]`,
+  team-tagged shells, `spawnEnemy`, generic `fire(t,aim)` (player feel unchanged via `?? cfg`
+  fallback), and a base `driveEnemy` (track/none aim). `predict` aim, mines, and true invisibility
+  are data-ready but TODO (M2/M3). See `ENEMY-TYPES-SPRINT.md`.
 - **`lan/`** — the **LAN multiplayer** build (`lan/server/` + `lan/public/`). Needs Node; Vercel
   can't host the persistent `ws` server, so this runs locally only.
 - **`reference/`** — the feel baseline. Untouched.
