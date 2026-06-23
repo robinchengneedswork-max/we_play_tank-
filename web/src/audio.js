@@ -28,6 +28,12 @@ function noise(dur,gain,freq,type){
   src.connect(f).connect(g).connect(a.destination); src.start(t); src.stop(t+dur);
 }
 const SFX={
+  shoot(strong){ tone('square', strong?320:250, strong?110:100, strong?0.09:0.06, strong?0.10:0.045); },
+  ricochet(){ tone('triangle',760,360,0.05,0.05); },
+  hit(){ tone('square',210,90,0.08,0.11); noise(0.08,0.07,900,'bandpass'); },
+  explode(){ tone('sawtooth',170,42,0.3,0.16); noise(0.3,0.18,520,'lowpass'); },   // enemy destroyed
+  death(){ tone('sawtooth',300,28,0.8,0.30); noise(0.8,0.30,380,'lowpass'); },     // player destroyed
+  waveStart(){ tone('square',520,680,0.12,0.07); },
   electric(){ tone('sawtooth',1100,120,0.34,0.16); noise(0.34,0.10,2600,'bandpass'); },  // White cloaking zap
   mineLay(){ tone('square',440,300,0.07,0.10); },
   mineBoom(){ tone('sawtooth',190,40,0.5,0.22); noise(0.5,0.28,420,'lowpass'); },

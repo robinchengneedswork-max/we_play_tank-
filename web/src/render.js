@@ -132,8 +132,9 @@ function render(){
   // particles
   for(const p of particles){ctx.globalAlpha=Math.max(0,p.life*3);ctx.fillStyle=p.c;
     ctx.beginPath();ctx.arc(p.x,p.y,3,0,7);ctx.fill();ctx.globalAlpha=1;}
-  // player tank (drawn last, on top)
-  drawTank(tank, getCSS('--tank'), getCSS('--tank-dark'));
+  // player tank (drawn last, on top; gone once destroyed)
+  if(!(gameMode==='roguelike' && run.phase==='dead'))
+    drawTank(tank, getCSS('--tank'), getCSS('--tank-dark'));
   ctx.restore();
   // sticks — show fixed bases where no thumb is down, then the active sticks
   if(cfg.fixedStick){

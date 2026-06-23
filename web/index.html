@@ -16,6 +16,7 @@
   <div class="hud-group">
     <button id="menuBtn" aria-label="Back to menu">☰</button>
     <button id="gear" aria-label="Tuning">⚙</button>
+    <button id="sbUpgradeBtn" aria-label="Sandbox upgrades" hidden>⬆</button>
   </div>
   <button id="modeBtn">Mode: Brawl<small>release stick to fire</small></button>
   <div class="hud-group">
@@ -55,6 +56,26 @@
 
 <!-- Between-wave upgrade pick -->
 <div id="upgrade"><h2>Choose an upgrade</h2><div id="upgradeCards"></div></div>
+
+<!-- Game over / run summary -->
+<div id="gameover">
+  <h2>Game Over</h2>
+  <p id="goStats"></p>
+  <div class="go-btns">
+    <button class="menu-btn primary" id="goRetry">Retry<small>new run</small></button>
+    <button class="menu-btn ghost" id="goMenu">Menu</button>
+  </div>
+</div>
+
+<!-- Sandbox upgrade tester -->
+<div id="sbUp">
+  <h2>Sandbox upgrades</h2>
+  <div id="sbUpList"></div>
+  <div class="go-btns">
+    <button class="panel-btn" id="sbUpClear">Clear all</button>
+    <button class="menu-btn ghost" id="sbUpClose">Done</button>
+  </div>
+</div>
 
 <!-- Shown only in portrait — the game is landscape-first -->
 <div id="rotate"><div class="rotate-icon">↻</div><p>Rotate your device to landscape</p></div>

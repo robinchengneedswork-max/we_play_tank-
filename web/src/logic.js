@@ -28,6 +28,7 @@ function fire(t, aim){
   shells.push({x:tipX,y:tipY,vx:Math.cos(aim)*speed,vy:Math.sin(aim)*speed,b:bounce,life:3.2,team:t.team,owner:t,rocket:!!t.rocket});
   for(let i=0;i<6;i++){const sp=60+Math.random()*120,ang=aim+(Math.random()-0.5)*0.7;
     particles.push({x:tipX,y:tipY,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,life:0.25,c:'#e8b24a'});}
+  SFX.shoot(isP);
   if(t.team==='player'){
     tank.fireSlowUntil = now + cfg.fireSlowMs;   // firing brakes movement briefly
     if(cfg.shake) shake=Math.min(shake+5,9);
@@ -177,41 +178,45 @@ function reflectStep(o,nx,ny,dt){
 
 function update(dt){
   const now=performance.now();
+  if(paused) return;                                            // sandbox upgrade overlay
   if(gameMode==='roguelike' && run.phase==='upgrade') return;   // paused while choosing an upgrade
-  // ---- player movement ----
-  // recoil brake: speed drops for a moment after firing
-  const baseMove = pMove();
-  const moveSpeed = now<tank.fireSlowUntil ? Math.max(20, baseMove-cfg.fireSlow*run.mods.fireSlow) : baseMove;
-  const mp=activePointer('move');
-  if(mp){ const s=stickVec(mp); const n=s.mag/cfg.rad;
-    tank.vx=Math.cos(s.ang)*moveSpeed*n; tank.vy=Math.sin(s.ang)*moveSpeed*n;
-    const target=s.ang; let d=((target-tank.bodyAngle+Math.PI)%(2*Math.PI))-Math.PI;
-    tank.bodyAngle+=d*cfg.body;
-  } else { tank.vx*=0.8; tank.vy*=0.8; }
-  tank.x+=tank.vx*dt; tank.y+=tank.vy*dt;
-  // tank vs frame
-  tank.x=Math.max(FRAME+tank.r,Math.min(W-FRAME-tank.r,tank.x));
-  tank.y=Math.max(FRAME+tank.r,Math.min(H-FRAME-tank.r,tank.y));
-  // tank vs obstacles (push out)
-  for(const o of obstacles){
-    const cx=Math.max(o.x,Math.min(tank.x,o.x+o.w));
-    const cy=Math.max(o.y,Math.min(tank.y,o.y+o.h));
-    const dx=tank.x-cx, dy=tank.y-cy, d=Math.hypot(dx,dy);
-    if(d<tank.r){ const nx=dx/(d||1),ny=dy/(d||1); tank.x=cx+nx*tank.r; tank.y=cy+ny*tank.r; }
+  const playerDead = gameMode==='roguelike' && run.phase==='dead';
+  // ---- player movement (skipped once dead — the wreck just sits while it explodes) ----
+  if(!playerDead){
+    // recoil brake: speed drops for a moment after firing
+    const baseMove = pMove();
+    const moveSpeed = now<tank.fireSlowUntil ? Math.max(20, baseMove-cfg.fireSlow*run.mods.fireSlow) : baseMove;
+    const mp=activePointer('move');
+    if(mp){ const s=stickVec(mp); const n=s.mag/cfg.rad;
+      tank.vx=Math.cos(s.ang)*moveSpeed*n; tank.vy=Math.sin(s.ang)*moveSpeed*n;
+      const target=s.ang; let d=((target-tank.bodyAngle+Math.PI)%(2*Math.PI))-Math.PI;
+      tank.bodyAngle+=d*cfg.body;
+    } else { tank.vx*=0.8; tank.vy*=0.8; }
+    tank.x+=tank.vx*dt; tank.y+=tank.vy*dt;
+    // tank vs frame
+    tank.x=Math.max(FRAME+tank.r,Math.min(W-FRAME-tank.r,tank.x));
+    tank.y=Math.max(FRAME+tank.r,Math.min(H-FRAME-tank.r,tank.y));
+    // tank vs obstacles (push out)
+    for(const o of obstacles){
+      const cx=Math.max(o.x,Math.min(tank.x,o.x+o.w));
+      const cy=Math.max(o.y,Math.min(tank.y,o.y+o.h));
+      const dx=tank.x-cx, dy=tank.y-cy, d=Math.hypot(dx,dy);
+      if(d<tank.r){ const nx=dx/(d||1),ny=dy/(d||1); tank.x=cx+nx*tank.r; tank.y=cy+ny*tank.r; }
+    }
+    // turret easing toward aim target
+    if(tank.aimTarget!==undefined){
+      let d=((tank.aimTarget-tank.turretAngle+Math.PI)%(2*Math.PI))-Math.PI;
+      tank.turretAngle+=d*pTurret();
+    }
+    trailTank(tank,dt);
+    // auto-fire: hold the aim stick past the ring to keep firing on cooldown
+    if(cfg.autofire){ const ap=activePointer('aim'); if(ap && stickVec(ap).raw>cfg.rad) tryFire(); }
   }
-  // turret easing toward aim target
-  if(tank.aimTarget!==undefined){
-    let d=((tank.aimTarget-tank.turretAngle+Math.PI)%(2*Math.PI))-Math.PI;
-    tank.turretAngle+=d*pTurret();
-  }
-  trailTank(tank,dt);
-  // auto-fire: hold the aim stick past the ring to keep firing on cooldown
-  if(cfg.autofire){ const ap=activePointer('aim'); if(ap && stickVec(ap).raw>cfg.rad) tryFire(); }
   // ---- wave intermission (breather + countdown while enemies warp in) ----
   if(gameMode==='roguelike' && run.phase==='intermission'){
     run.timer-=dt*1000;
     if(run.timer<=0){
-      run.phase='fighting';
+      run.phase='fighting'; SFX.waveStart();
       for(const e of enemies){ e.spawning=false; if(e.invisible){ SFX.electric(); e.cloakStart=now; } } // White cloaks on round start
     }
   }
@@ -223,7 +228,7 @@ function update(dt){
     const steps=4, sdt=dt/steps; let dead=false;
     for(let k=0;k<steps;k++){
       const r=reflectStep(sh,0,0,sdt); sh.x=r.x;sh.y=r.y;sh.vx=r.vx;sh.vy=r.vy;
-      if(r.hit){ sh.b--; if(sh.b<0){dead=true;break;} }
+      if(r.hit){ sh.b--; if(sh.team==='player') SFX.ricochet(); if(sh.b<0){dead=true;break;} }
       // hit an opposing tank?
       let victim=null;
       if(sh.team!=='player' && Math.hypot(sh.x-tank.x,sh.y-tank.y)<tank.r+4) victim=tank;
@@ -256,32 +261,37 @@ function burst(x,y,color,n){
 }
 function damageTank(t, dmg){
   if(t.team==='player'){
+    if(gameMode==='roguelike' && run.phase==='dead') return;   // already gone
     burst(t.x,t.y,'#ffffff',12);
     if(cfg.shake) shake=Math.min(shake+8,12);
     if(cfg.haptics&&navigator.vibrate) navigator.vibrate([18,40,18]);
     if(gameMode==='roguelike'){           // sandbox player is immortal (feedback only)
       t.hp-=dmg; run.hp=Math.max(0,t.hp); updateHud();
-      if(t.hp<=0) onPlayerDeath();
-    }
+      if(t.hp<=0) onPlayerDeath(); else SFX.hit();
+    } else SFX.hit();
   } else {
     t.hp-=dmg;
     burst(t.x,t.y,t.color,10);
     if(cfg.shake) shake=Math.min(shake+4,9);
-    if(t.hp<=0) killEnemy(t);
+    if(t.hp<=0) killEnemy(t); else SFX.hit();
   }
 }
 function killEnemy(e){
   const i=enemies.indexOf(e); if(i<0) return;
   enemies.splice(i,1);
   score++;
-  burst(e.x,e.y,e.color,16);
+  burst(e.x,e.y,e.color,16); SFX.explode();
   if(cfg.shake) shake=Math.min(shake+6,11);
   if(cfg.haptics&&navigator.vibrate) navigator.vibrate([12,28,12]);
   if(gameMode==='roguelike'){ run.kills++; updateHud(); if(enemies.length===0) offerUpgrade(); }
   else if(gameMode==='sandbox'){ updateHud(); const p=randSpawnPos(); spawnEnemy(e.type,p.x,p.y); }
 }
 function onPlayerDeath(){
-  // TODO: proper game-over / run-summary screen. For now, bounce to the menu.
-  started=false;
-  toMenu();
+  if(run.phase==='dead') return;
+  run.phase='dead';
+  burst(tank.x,tank.y,'#ffffff',20); burst(tank.x,tank.y,'#e8a23a',20);
+  if(cfg.shake) shake=18;
+  if(cfg.haptics&&navigator.vibrate) navigator.vibrate([40,60,120]);
+  SFX.death();
+  setTimeout(showGameOver, 750);   // let the wreck explode, then the summary screen
 }

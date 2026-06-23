@@ -73,3 +73,31 @@ function offerUpgrade(){
   });
   upOverlay.classList.add('active');
 }
+
+// ---- game over / run summary ----
+const gameover=document.getElementById('gameover');
+function showGameOver(){
+  started=false;
+  document.getElementById('hud').classList.add('hud-hidden');
+  document.getElementById('goStats').textContent='Reached wave '+run.level+' · '+run.kills+' kills';
+  gameover.classList.add('active');
+}
+document.getElementById('goRetry').onclick=()=>{ gameover.classList.remove('active'); startMode('roguelike'); };
+document.getElementById('goMenu').onclick =()=>{ gameover.classList.remove('active'); toMenu(); };
+
+// ---- sandbox upgrade tester: apply any upgrade (stackable) to try combos ----
+const sbUp=document.getElementById('sbUp');
+const sbUpList=document.getElementById('sbUpList');
+function openSandboxUpgrades(){
+  paused=true; sbUpList.innerHTML='';
+  UPGRADES.forEach(u=>{
+    const b=document.createElement('button'); b.className='up-card';
+    b.innerHTML='<b>'+u.name+'</b><small>'+u.desc+'</small>';
+    b.onclick=()=>{ u.apply(); updateHud(); };   // stackable; overlay stays open
+    sbUpList.appendChild(b);
+  });
+  sbUp.classList.add('active');
+}
+document.getElementById('sbUpgradeBtn').onclick=openSandboxUpgrades;
+document.getElementById('sbUpClear').onclick=()=>{ run.mods=freshMods(); run.maxHp=3; run.hp=3; tank.maxHp=3; tank.hp=3; updateHud(); };
+document.getElementById('sbUpClose').onclick=()=>{ sbUp.classList.remove('active'); paused=false; };

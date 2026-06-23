@@ -33,4 +33,5 @@ let W=0, H=0, DPR=1;             // canvas size, set in main.resize()
 let mode='brawl';                 // 'brawl' | 'pubg'  (right-stick fire model)
 let gameMode=null;                // null (menu) | 'sandbox' | 'roguelike'
 let started=false;                // true once a mode is running (gates the loop)
+let paused=false;                 // freezes the sim (sandbox upgrade overlay)
 let fireBtn={x:0,y:0,r:38};       // PUBG-mode trigger, positioned in resize()

@@ -20,8 +20,8 @@ The repo holds **two separate builds** of the game, plus the feel baseline:
   (`gameMode` in config): **Sandbox** (respawning test range of enemy types) and **Roguelike**
   (`run` state in `state.js` — escalating waves with an inter-wave countdown breather
   (`run.phase` intermission/fighting; enemies "warp in" inert+invulnerable while `run.timer` runs),
-  wave 1 = Browns only, 3 HP, death→menu; level/kills/hp HUD). **Between waves you pick 1 of 3
-  upgrades** (`UPGRADES`/`pickUpgrades` in state.js; `offerUpgrade` overlay in ui.js; `run.phase==='upgrade'`
+  wave 1 = Browns only, 3 HP, death → `dead` phase (wreck explodes) → **game-over/run-summary
+  overlay** (Retry/Menu); level/kills/hp HUD). **Between waves you pick 1 of 3 upgrades** (`UPGRADES`/`pickUpgrades` in state.js; `offerUpgrade` overlay in ui.js; `run.phase==='upgrade'`
   pauses the sim). Upgrades are `run.mods` (multipliers/adders) layered over cfg via player
   effective-stat helpers `pMove/pTurret/pCd/pShell/pBounce/pMaxShells` in logic.js — so cfg stays the
   live-tunable baseline and the player's no-upgrade feel is unchanged. Landscape-first (portrait shows
@@ -36,7 +36,9 @@ The repo holds **two separate builds** of the game, plus the feel baseline:
   cloaks on round start (`SFX.electric`, fades to ~0.06 alpha; revealed by muzzle flash + tread
   marks). **Tread marks** (`tracks[]`, fade, cleared between levels). **Rocket shells** render
   elongated. `WAVES` composition table (procedural at 8+). Audio: `audio.js` (lazy Web Audio,
-  `cfg.sound`). See `ENEMY-TYPES-SPRINT.md`.
+  `cfg.sound`) — shoot/ricochet/hit/explode/death/waveStart/electric/mine SFX. **Sandbox** has an
+  upgrade tester (⬆ HUD button → apply any upgrade, stackable, Clear all; `paused` freezes the sim
+  while open). See `ENEMY-TYPES-SPRINT.md`.
   **Input/feel options** (in the ⚙ panel): floating vs **fixed stick** (centers are player-defined
   via a 2-tap calibration overlay, stored as W/H fractions), **auto-fire** (push the aim stick past
   the ring to fire on cooldown), **fire-slow** (firing brakes movement by `fireSlow` px/s for

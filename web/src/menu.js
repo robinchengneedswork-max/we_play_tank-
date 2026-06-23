@@ -10,12 +10,13 @@ function showScreen(id){
 
 const hud=document.getElementById('hud');
 function setHudForMode(){
-  document.getElementById('statHits').hidden = (gameMode!=='sandbox');
-  document.getElementById('statRun').hidden  = (gameMode!=='roguelike');
+  document.getElementById('statHits').hidden    = (gameMode!=='sandbox');
+  document.getElementById('statRun').hidden     = (gameMode!=='roguelike');
+  document.getElementById('sbUpgradeBtn').hidden= (gameMode!=='sandbox');
 }
 
 async function startMode(m){
-  gameMode=m;
+  gameMode=m; paused=false;
   // Fullscreen + landscape lock on the user gesture (best-effort; ignored on desktop).
   try{ await document.documentElement.requestFullscreen(); }catch(e){}
   try{ await screen.orientation.lock('landscape'); }catch(e){}
@@ -30,7 +31,8 @@ async function startMode(m){
 }
 
 function toMenu(){
-  started=false; gameMode=null;
+  started=false; gameMode=null; paused=false;
+  ['gameover','sbUp','upgrade'].forEach(id=>document.getElementById(id).classList.remove('active'));
   hud.classList.add('hud-hidden');
   showScreen('screen-menu');   // stay in fullscreen so re-entering a mode is instant
 }
