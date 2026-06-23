@@ -27,7 +27,8 @@ The repo holds **two separate builds** of the game, plus the feel baseline:
   combat base: `enemies[]`, team-tagged shells, `spawnEnemy`, generic `fire(t,aim)` (player feel
   unchanged via `?? cfg`). `driveEnemy` aim modes: `track`/`none`/`cutoff` (half-lead, Purple)/
   `predict` (`aimFor` + `bankAim`/`segBlocked` for 1-bounce bank shots, Green). **Mines** (`mines[]`,
-  `layMine`/`updateMines`/`detonate` — arm/fuse/proximity/chain, shell-style team rules). **White**
+  `layMine`/`updateMines`/`detonate` — arm/fuse/proximity/chain; blast hits ALL tanks regardless of
+  team, and shells detonate mines on contact). **White**
   cloaks on round start (`SFX.electric`, fades to ~0.06 alpha; revealed by muzzle flash + tread
   marks). **Tread marks** (`tracks[]`, fade, cleared between levels). **Rocket shells** render
   elongated. `WAVES` composition table (procedural at 8+). Audio: `audio.js` (lazy Web Audio,

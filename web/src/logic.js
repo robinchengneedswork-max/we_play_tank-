@@ -129,18 +129,19 @@ function updateMines(dt){
     if(m.arm>0) m.arm-=dt;
     m.fuse-=dt;
     if(m.fuse<=0){ detonate(m); continue; }
-    if(m.arm<=0){                              // armed: trigger on an opposing tank nearby
-      if(m.team!=='player' && near(tank,m,m.blast*0.6)) { detonate(m); continue; }
-      for(const e of enemies){ if(!e.spawning && m.team!==e.team && near(e,m,m.blast*0.6)){ detonate(m); break; } }
+    if(m.arm<=0){                              // armed: any tank nearby trips it
+      if(near(tank,m,m.blast*0.6)) { detonate(m); continue; }
+      for(const e of enemies){ if(!e.spawning && near(e,m,m.blast*0.6)){ detonate(m); break; } }
     }
   }
   for(let i=mines.length-1;i>=0;i--) if(mines[i].dead) mines.splice(i,1);
 }
+// Mines hit EVERYONE in the blast, regardless of team — bait enemies into them, but mind your own feet.
 function detonate(m){
   if(m.dead) return; m.dead=true;
   SFX.mineBoom(); burst(m.x,m.y,'#e8a23a',22); if(cfg.shake) shake=Math.min(shake+9,13);
-  if(m.team!=='player' && near(tank,m,m.blast)) damageTank(tank,1);
-  for(const e of [...enemies]){ if(m.team!==e.team && !e.spawning && near(e,m,m.blast)) damageTank(e,1); }
+  if(near(tank,m,m.blast)) damageTank(tank,1);
+  for(const e of [...enemies]){ if(!e.spawning && near(e,m,m.blast)) damageTank(e,1); }
   for(const o of mines){ if(!o.dead && near(o,m,m.blast)) detonate(o); }   // chain
 }
 
@@ -217,6 +218,8 @@ function update(dt){
       if(sh.team!=='player' && Math.hypot(sh.x-tank.x,sh.y-tank.y)<tank.r+4) victim=tank;
       if(!victim){ for(const e of enemies){ if(sh.team!==e.team && !e.spawning && Math.hypot(sh.x-e.x,sh.y-e.y)<e.r+4){ victim=e; break; } } }
       if(victim){ damageTank(victim,1); dead=true; break; }
+      // any shell detonates a mine it touches
+      for(const m of mines){ if(!m.dead && Math.hypot(sh.x-m.x,sh.y-m.y)<10){ detonate(m); dead=true; break; } }
       if(dead)break;
     }
     if(dead){ shells.splice(i,1); continue; }
