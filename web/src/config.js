@@ -6,8 +6,12 @@ const cv = document.getElementById('game');
 const ctx = cv.getContext('2d');
 
 // ---- tunable config (live-bound to the panel in ui.js) ----
+// Pacing baseline tuned ~60% of the reference for a slower, more cerebral
+// Wii-Tanks feel. move/shell are the big "speed" dials; body is chassis turn.
+// turret-turn and fire-rate (cd) are left responsive on purpose — they're
+// earmarked as run upgrades, and turret lag couples to fire-on-release accuracy.
 const DEFAULTS = {
-  move:300, turret:0.35, body:0.25, shell:520, bounce:2,
+  move:180, turret:0.35, body:0.18, shell:310, bounce:2,
   cd:260, dz:26, rad:80, maxshell:5, preview:true, haptics:true, shake:true
 };
 const cfg = {...DEFAULTS};
