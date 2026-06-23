@@ -1,0 +1,14 @@
+{
+  "name": "tank-arena",
+  "version": "0.1.0",
+  "private": true,
+  "description": "LAN multiplayer Wii Play Tanks-style game. Host screen on a TV, phones as twin-stick controllers.",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server/server.js",
+    "dev": "node server/server.js"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

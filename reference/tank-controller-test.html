@@ -1,0 +1,430 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Tank Controller Feel Test</title>
+<style>
+  :root{
+    --board:#e7ddc4; --grid:#d6c8a4; --frame:#b9a87e;
+    --ink:#2c2a26; --slate:#6b7280; --slate-top:#8c93a0;
+    --tank:#3b6fb5; --tank-dark:#2b4f82; --enemy:#c0584a;
+    --shell:#33312c; --fire:#d9483b; --panel:#211f1b;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;overflow:hidden;background:#1a1916;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    user-select:none;-webkit-user-select:none;overscroll-behavior:none;}
+  #game{display:block;touch-action:none;width:100vw;height:100vh;}
+
+  /* HUD */
+  #hud{position:fixed;top:0;left:0;width:100%;pointer-events:none;
+    display:flex;justify-content:space-between;align-items:flex-start;
+    padding:max(10px,env(safe-area-inset-top)) 14px 0;z-index:5;
+    font-size:13px;color:var(--ink);}
+  .pill{background:rgba(255,255,255,.66);backdrop-filter:blur(3px);
+    border-radius:999px;padding:6px 12px;font-weight:600;line-height:1.1;
+    box-shadow:0 1px 3px rgba(0,0,0,.18);}
+  #modeBtn{pointer-events:auto;cursor:pointer;border:none;font:inherit;
+    background:var(--ink);color:#f3ecd9;border-radius:999px;padding:8px 14px;
+    font-weight:700;box-shadow:0 2px 6px rgba(0,0,0,.3);}
+  #modeBtn small{display:block;font-weight:500;opacity:.7;font-size:10px;margin-top:1px;}
+  #gear{pointer-events:auto;cursor:pointer;width:40px;height:40px;border-radius:50%;
+    border:none;background:rgba(255,255,255,.66);font-size:20px;
+    display:flex;align-items:center;justify-content:center;box-shadow:0 1px 3px rgba(0,0,0,.2);}
+
+  /* Tuning panel */
+  #panel{position:fixed;top:0;right:0;height:100%;width:min(82vw,300px);
+    background:var(--panel);color:#e9e2cf;z-index:20;transform:translateX(105%);
+    transition:transform .22s ease;padding:18px 16px;overflow-y:auto;
+    box-shadow:-6px 0 24px rgba(0,0,0,.4);}
+  #panel.open{transform:translateX(0);}
+  #panel h2{font-size:14px;letter-spacing:.06em;text-transform:uppercase;
+    opacity:.6;margin:4px 0 14px;}
+  .row{margin-bottom:15px;}
+  .row label{display:flex;justify-content:space-between;font-size:12.5px;
+    margin-bottom:5px;font-weight:600;}
+  .row label span{opacity:.65;font-variant-numeric:tabular-nums;}
+  .row input[type=range]{width:100%;accent-color:var(--tank);}
+  .toggle{display:flex;align-items:center;justify-content:space-between;
+    font-size:12.5px;font-weight:600;margin-bottom:15px;}
+  .toggle input{width:42px;height:24px;accent-color:var(--tank);}
+  #closePanel{position:absolute;top:12px;right:14px;background:none;border:none;
+    color:#e9e2cf;font-size:22px;cursor:pointer;opacity:.7;}
+  #reset{width:100%;margin-top:6px;padding:9px;border:none;border-radius:8px;
+    background:#3a372f;color:#e9e2cf;font-weight:600;font-size:12.5px;cursor:pointer;}
+
+  /* Start overlay */
+  #start{position:fixed;inset:0;z-index:30;background:#1a1916;color:#e9e2cf;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;padding:24px;gap:14px;}
+  #start h1{font-size:22px;font-weight:800;letter-spacing:.01em;}
+  #start p{font-size:14px;opacity:.7;max-width:340px;line-height:1.5;}
+  #startBtn{margin-top:8px;padding:14px 30px;border:none;border-radius:12px;
+    background:var(--tank);color:#fff;font-size:16px;font-weight:700;cursor:pointer;
+    box-shadow:0 4px 14px rgba(59,111,181,.4);}
+  #rotateHint{font-size:12px;opacity:.55;}
+</style>
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<div id="hud">
+  <button id="gear" aria-label="Tuning">⚙</button>
+  <button id="modeBtn">Mode: Brawl<small>release stick to fire</small></button>
+  <div class="pill" id="score">Hits 0</div>
+</div>
+
+<div id="panel">
+  <button id="closePanel" aria-label="Close">×</button>
+  <h2>Feel tuning</h2>
+  <div class="row"><label>Move speed<span id="vMove"></span></label><input id="move" type="range" min="120" max="520" step="10"></div>
+  <div class="row"><label>Turret weight (lerp)<span id="vTurret"></span></label><input id="turret" type="range" min="0.05" max="1" step="0.01"></div>
+  <div class="row"><label>Body turn ease<span id="vBody"></span></label><input id="body" type="range" min="0.05" max="1" step="0.01"></div>
+  <div class="row"><label>Shell speed<span id="vShell"></span></label><input id="shell" type="range" min="240" max="900" step="20"></div>
+  <div class="row"><label>Shell bounces<span id="vBounce"></span></label><input id="bounce" type="range" min="0" max="4" step="1"></div>
+  <div class="row"><label>Fire cooldown (ms)<span id="vCd"></span></label><input id="cd" type="range" min="0" max="900" step="20"></div>
+  <div class="row"><label>Cancel deadzone (Brawl)<span id="vDz"></span></label><input id="dz" type="range" min="0" max="60" step="2"></div>
+  <div class="row"><label>Stick radius<span id="vRad"></span></label><input id="rad" type="range" min="50" max="130" step="5"></div>
+  <div class="row"><label>Max shells on screen<span id="vMax"></span></label><input id="maxshell" type="range" min="1" max="8" step="1"></div>
+  <div class="toggle"><span>Aim trajectory preview</span><input id="preview" type="checkbox"></div>
+  <div class="toggle"><span>Haptics</span><input id="haptics" type="checkbox"></div>
+  <div class="toggle"><span>Screen shake</span><input id="shake" type="checkbox"></div>
+  <button id="reset">Reset to defaults</button>
+</div>
+
+<div id="start">
+  <h1>Tank Controller Feel Test</h1>
+  <p>Left thumb drives. Right thumb aims. Toggle between <b>Brawl</b> (release the aim stick to fire, release in the center to cancel) and <b>PUBG</b> (aim stick only + an index-finger trigger, top-right).</p>
+  <p class="rotateHint" id="rotateHint">Best in landscape on your phone.</p>
+  <button id="startBtn">Tap to start</button>
+</div>
+
+<script>
+"use strict";
+const cv = document.getElementById('game');
+const ctx = cv.getContext('2d');
+
+// ---- tunable config (live-bound to panel) ----
+const DEFAULTS = {
+  move:300, turret:0.35, body:0.25, shell:520, bounce:2,
+  cd:260, dz:26, rad:80, maxshell:5, preview:true, haptics:true, shake:true
+};
+const cfg = {...DEFAULTS};
+
+let W=0,H=0,DPR=1;
+let mode='brawl';                 // 'brawl' | 'pubg'
+let started=false;
+const FRAME=18;                   // board inner margin
+let fireBtn={x:0,y:0,r:38};
+
+function resize(){
+  DPR=Math.min(window.devicePixelRatio||1,2);
+  W=window.innerWidth; H=window.innerHeight;
+  cv.width=W*DPR; cv.height=H*DPR;
+  cv.style.width=W+'px'; cv.style.height=H+'px';
+  ctx.setTransform(DPR,0,0,DPR,0,0);
+  fireBtn.x=W-58; fireBtn.y=64; fireBtn.r=40;
+  layoutObstacles();
+}
+window.addEventListener('resize',resize);
+window.addEventListener('orientationchange',()=>setTimeout(resize,200));
+
+// ---- world ----
+const tank={x:0,y:0,r:17,bodyAngle:0,turretAngle:-Math.PI/2,vx:0,vy:0};
+let obstacles=[];
+let targets=[];
+let shells=[];
+let particles=[];
+let lastFire=0;
+let score=0;
+let shake=0;
+
+function layoutObstacles(){
+  // proportional blocks for bank-shot practice
+  obstacles=[
+    {x:W*0.30,y:H*0.28,w:W*0.10,h:H*0.20},
+    {x:W*0.60,y:H*0.52,w:W*0.12,h:H*0.18},
+    {x:W*0.46,y:H*0.12,w:W*0.08,h:H*0.14},
+  ];
+  if(!tank.x){ tank.x=W*0.16; tank.y=H*0.6; }
+  if(targets.length===0){
+    for(let i=0;i<3;i++) targets.push({x:0,y:0,r:15,t:0});
+    targets.forEach(placeTarget);
+  }
+}
+function placeTarget(tg){
+  for(let tries=0;tries<60;tries++){
+    const x=FRAME+30+Math.random()*(W-2*FRAME-60);
+    const y=FRAME+30+Math.random()*(H-2*FRAME-60);
+    if(Math.hypot(x-tank.x,y-tank.y)<160) continue;
+    if(obstacles.some(o=>x>o.x-20&&x<o.x+o.w+20&&y>o.y-20&&y<o.y+o.h+20)) continue;
+    tg.x=x; tg.y=y; tg.t=0; return;
+  }
+  tg.x=W/2; tg.y=H/2;
+}
+
+// ---- input: pointer -> role ----
+const pointers=new Map();   // id -> {role, bx,by, cx,cy}
+function stickVec(p){
+  let dx=p.cx-p.bx, dy=p.cy-p.by;
+  const d=Math.hypot(dx,dy)||1;
+  const clamp=Math.min(d,cfg.rad);
+  return {x:dx/d*clamp, y:dy/d*clamp, mag:clamp, raw:d, ang:Math.atan2(dy,dx)};
+}
+function inFireBtn(x,y){ return mode==='pubg' && Math.hypot(x-fireBtn.x,y-fireBtn.y)<fireBtn.r+6; }
+
+cv.addEventListener('pointerdown',e=>{
+  if(!started) return;
+  cv.setPointerCapture(e.pointerId);
+  const x=e.clientX,y=e.clientY;
+  if(inFireBtn(x,y)){ pointers.set(e.pointerId,{role:'fire'}); tryFire(); return; }
+  const role = x < W/2 ? 'move' : 'aim';
+  pointers.set(e.pointerId,{role,bx:x,by:y,cx:x,cy:y});
+});
+cv.addEventListener('pointermove',e=>{
+  const p=pointers.get(e.pointerId); if(!p||p.role==='fire')return;
+  p.cx=e.clientX; p.cy=e.clientY;
+  if(p.role==='aim'){ const s=stickVec(p); if(s.raw>6) tank.aimTarget=s.ang; }
+});
+function endPointer(e){
+  const p=pointers.get(e.pointerId); if(!p)return;
+  if(p.role==='aim'){
+    const s=stickVec(p);
+    if(mode==='brawl' && s.mag>cfg.dz){ tank.aimTarget=s.ang; tryFire(); }
+    // pubg: no fire on release; both keep last turret angle
+  }
+  pointers.delete(e.pointerId);
+}
+cv.addEventListener('pointerup',endPointer);
+cv.addEventListener('pointercancel',endPointer);
+function activePointer(role){ for(const p of pointers.values()) if(p.role===role) return p; return null; }
+
+function tryFire(){
+  const now=performance.now();
+  if(now-lastFire<cfg.cd) return;
+  if(shells.length>=cfg.maxshell) return;
+  lastFire=now;
+  const a=tank.turretAngle;
+  const tipX=tank.x+Math.cos(a)*(tank.r+10);
+  const tipY=tank.y+Math.sin(a)*(tank.r+10);
+  shells.push({x:tipX,y:tipY,vx:Math.cos(a)*cfg.shell,vy:Math.sin(a)*cfg.shell,b:cfg.bounce,life:3.2});
+  for(let i=0;i<6;i++){const sp=60+Math.random()*120,ang=a+(Math.random()-0.5)*0.7;
+    particles.push({x:tipX,y:tipY,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,life:0.25,c:'#e8b24a'});}
+  if(cfg.shake) shake=Math.min(shake+5,9);
+  if(cfg.haptics&&navigator.vibrate) navigator.vibrate(18);
+}
+
+// ---- physics ----
+function reflectStep(o,nx,ny,dt){
+  // step a moving point, reflecting off frame + obstacles. returns {x,y,vx,vy,hit}
+  let x=o.x,y=o.y,vx=o.vx,vy=o.vy,hit=false;
+  let px=x+vx*dt, py=y+vy*dt;
+  if(px<FRAME){px=FRAME;vx=-vx;hit=true;} else if(px>W-FRAME){px=W-FRAME;vx=-vx;hit=true;}
+  if(py<FRAME){py=FRAME;vy=-vy;hit=true;} else if(py>H-FRAME){py=H-FRAME;vy=-vy;hit=true;}
+  for(const ob of obstacles){
+    if(px>ob.x&&px<ob.x+ob.w&&py>ob.y&&py<ob.y+ob.h){
+      // resolve on the axis we entered from
+      const fromLeft=x<=ob.x, fromRight=x>=ob.x+ob.w;
+      const fromTop=y<=ob.y, fromBot=y>=ob.y+ob.h;
+      if(fromLeft||fromRight){ vx=-vx; px=fromLeft?ob.x-0.1:ob.x+ob.w+0.1; }
+      else if(fromTop||fromBot){ vy=-vy; py=fromTop?ob.y-0.1:ob.y+ob.h+0.1; }
+      else { vx=-vx; vy=-vy; }
+      hit=true;
+    }
+  }
+  return {x:px,y:py,vx,vy,hit};
+}
+
+function update(dt){
+  // movement
+  const mp=activePointer('move');
+  if(mp){ const s=stickVec(mp); const n=s.mag/cfg.rad;
+    tank.vx=Math.cos(s.ang)*cfg.move*n; tank.vy=Math.sin(s.ang)*cfg.move*n;
+    const target=s.ang; let d=((target-tank.bodyAngle+Math.PI)%(2*Math.PI))-Math.PI;
+    tank.bodyAngle+=d*cfg.body;
+  } else { tank.vx*=0.8; tank.vy*=0.8; }
+  tank.x+=tank.vx*dt; tank.y+=tank.vy*dt;
+  // tank vs frame
+  tank.x=Math.max(FRAME+tank.r,Math.min(W-FRAME-tank.r,tank.x));
+  tank.y=Math.max(FRAME+tank.r,Math.min(H-FRAME-tank.r,tank.y));
+  // tank vs obstacles (push out)
+  for(const o of obstacles){
+    const cx=Math.max(o.x,Math.min(tank.x,o.x+o.w));
+    const cy=Math.max(o.y,Math.min(tank.y,o.y+o.h));
+    const dx=tank.x-cx, dy=tank.y-cy, d=Math.hypot(dx,dy);
+    if(d<tank.r){ const nx=dx/(d||1),ny=dy/(d||1); tank.x=cx+nx*tank.r; tank.y=cy+ny*tank.r; }
+  }
+  // turret easing toward aim target
+  if(tank.aimTarget!==undefined){
+    let d=((tank.aimTarget-tank.turretAngle+Math.PI)%(2*Math.PI))-Math.PI;
+    tank.turretAngle+=d*cfg.turret;
+  }
+  // shells
+  for(let i=shells.length-1;i>=0;i--){
+    const sh=shells[i]; sh.life-=dt; if(sh.life<=0){shells.splice(i,1);continue;}
+    const steps=4, sdt=dt/steps; let dead=false;
+    for(let k=0;k<steps;k++){
+      const r=reflectStep(sh,0,0,sdt); sh.x=r.x;sh.y=r.y;sh.vx=r.vx;sh.vy=r.vy;
+      if(r.hit){ sh.b--; if(sh.b<0){dead=true;break;} }
+      for(const tg of targets){ if(Math.hypot(sh.x-tg.x,sh.y-tg.y)<tg.r+4){
+        hitTarget(tg); dead=true; break; } }
+      if(dead)break;
+    }
+    if(dead) shells.splice(i,1);
+  }
+  // particles
+  for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.life-=dt;
+    if(p.life<=0){particles.splice(i,1);continue;} p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=0.9;p.vy*=0.9;}
+  // targets gentle pulse
+  targets.forEach(t=>t.t+=dt);
+  if(shake>0) shake=Math.max(0,shake-dt*30);
+}
+function hitTarget(tg){
+  score++; document.getElementById('score').textContent='Hits '+score;
+  for(let i=0;i<14;i++){const sp=80+Math.random()*200,a=Math.random()*Math.PI*2;
+    particles.push({x:tg.x,y:tg.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:0.4,c:'#c0584a'});}
+  if(cfg.shake) shake=Math.min(shake+7,11);
+  if(cfg.haptics&&navigator.vibrate) navigator.vibrate([12,30,12]);
+  placeTarget(tg);
+}
+
+// ---- render ----
+function drawStick(p,color){
+  if(!p)return; const s=stickVec(p);
+  ctx.save();
+  ctx.globalAlpha=0.9;
+  ctx.beginPath();ctx.arc(p.bx,p.by,cfg.rad,0,7);ctx.strokeStyle='rgba(255,255,255,.5)';ctx.lineWidth=3;ctx.stroke();
+  ctx.beginPath();ctx.arc(p.bx,p.by,cfg.rad,0,7);ctx.fillStyle='rgba(255,255,255,.12)';ctx.fill();
+  ctx.beginPath();ctx.arc(p.bx+s.x,p.by+s.y,28,0,7);ctx.fillStyle=color;ctx.fill();
+  ctx.strokeStyle='rgba(0,0,0,.18)';ctx.lineWidth=2;ctx.stroke();
+  ctx.restore();
+}
+function drawPreview(){
+  if(!cfg.preview)return; const ap=activePointer('aim'); if(!ap)return;
+  let g={x:tank.x+Math.cos(tank.aimTarget)*(tank.r+10),
+         y:tank.y+Math.sin(tank.aimTarget)*(tank.r+10),
+         vx:Math.cos(tank.aimTarget)*cfg.shell, vy:Math.sin(tank.aimTarget)*cfg.shell,b:cfg.bounce};
+  ctx.save();ctx.setLineDash([3,7]);ctx.lineWidth=2.5;ctx.strokeStyle='rgba(44,42,38,.45)';
+  ctx.beginPath();ctx.moveTo(g.x,g.y);
+  const sdt=1/240;
+  for(let i=0;i<260;i++){
+    const r=reflectStep(g,0,0,sdt); g.x=r.x;g.y=r.y;g.vx=r.vx;g.vy=r.vy;
+    if(r.hit){g.b--; if(g.b<0)break;}
+    if(targets.some(t=>Math.hypot(g.x-t.x,g.y-t.y)<t.r+4))break;
+    ctx.lineTo(g.x,g.y);
+  }
+  ctx.stroke();ctx.restore();
+}
+function render(){
+  ctx.save();
+  if(shake>0) ctx.translate((Math.random()-0.5)*shake,(Math.random()-0.5)*shake);
+  // board
+  ctx.fillStyle=getCSS('--board');ctx.fillRect(0,0,W,H);
+  ctx.strokeStyle=getCSS('--grid');ctx.lineWidth=1;
+  const g=34;
+  for(let x=FRAME;x<=W-FRAME;x+=g){ctx.beginPath();ctx.moveTo(x,FRAME);ctx.lineTo(x,H-FRAME);ctx.stroke();}
+  for(let y=FRAME;y<=H-FRAME;y+=g){ctx.beginPath();ctx.moveTo(FRAME,y);ctx.lineTo(W-FRAME,y);ctx.stroke();}
+  // frame
+  ctx.strokeStyle=getCSS('--frame');ctx.lineWidth=6;
+  ctx.strokeRect(FRAME-3,FRAME-3,W-2*FRAME+6,H-2*FRAME+6);
+  // obstacles
+  for(const o of obstacles){
+    ctx.fillStyle=getCSS('--slate');ctx.fillRect(o.x,o.y,o.w,o.h);
+    ctx.fillStyle=getCSS('--slate-top');ctx.fillRect(o.x,o.y,o.w,5);
+  }
+  drawPreview();
+  // targets
+  for(const t of targets){
+    const pulse=1+Math.sin(t.t*5)*0.06;
+    ctx.save();ctx.translate(t.x,t.y);ctx.scale(pulse,pulse);
+    ctx.beginPath();ctx.arc(0,0,t.r,0,7);ctx.fillStyle=getCSS('--enemy');ctx.fill();
+    ctx.beginPath();ctx.arc(0,0,t.r*0.45,0,7);ctx.fillStyle='rgba(255,255,255,.85)';ctx.fill();
+    ctx.restore();
+  }
+  // shells
+  for(const sh of shells){ctx.beginPath();ctx.arc(sh.x,sh.y,5,0,7);ctx.fillStyle=getCSS('--shell');ctx.fill();}
+  // particles
+  for(const p of particles){ctx.globalAlpha=Math.max(0,p.life*3);ctx.fillStyle=p.c;
+    ctx.beginPath();ctx.arc(p.x,p.y,3,0,7);ctx.fill();ctx.globalAlpha=1;}
+  // tank
+  ctx.save();ctx.translate(tank.x,tank.y);
+  ctx.save();ctx.rotate(tank.bodyAngle);
+  ctx.fillStyle=getCSS('--tank-dark');ctx.fillRect(-tank.r-2,-tank.r+1,tank.r*2+4,5);
+  ctx.fillRect(-tank.r-2,tank.r-6,tank.r*2+4,5);
+  ctx.fillStyle=getCSS('--tank');ctx.fillRect(-tank.r,-tank.r+3,tank.r*2,tank.r*2-6);
+  ctx.restore();
+  // turret
+  ctx.rotate(tank.turretAngle);
+  ctx.fillStyle=getCSS('--tank-dark');ctx.fillRect(0,-4,tank.r+12,8);
+  ctx.beginPath();ctx.arc(0,0,9,0,7);ctx.fill();
+  ctx.fillStyle=getCSS('--tank');ctx.beginPath();ctx.arc(0,0,6,0,7);ctx.fill();
+  ctx.restore();
+  ctx.restore();
+  // sticks
+  drawStick(activePointer('move'),getCSS('--tank'));
+  drawStick(activePointer('aim'),'rgba(217,72,59,.92)');
+  // fire button (pubg)
+  if(mode==='pubg'){
+    const held=activePointer('fire');
+    ctx.beginPath();ctx.arc(fireBtn.x,fireBtn.y,fireBtn.r,0,7);
+    ctx.fillStyle=held?'rgba(217,72,59,.95)':'rgba(217,72,59,.78)';ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,.8)';ctx.lineWidth=3;ctx.stroke();
+    ctx.fillStyle='#fff';ctx.font='600 12px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText('FIRE',fireBtn.x,fireBtn.y);
+  }
+}
+const cssCache={};
+function getCSS(v){ if(!cssCache[v]) cssCache[v]=getComputedStyle(document.documentElement).getPropertyValue(v).trim(); return cssCache[v]; }
+
+// ---- loop ----
+let last=0;
+function loop(t){
+  const dt=Math.min((t-last)/1000||0,0.05); last=t;
+  if(started){ update(dt); render(); }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+// ---- UI wiring ----
+const panel=document.getElementById('panel');
+document.getElementById('gear').onclick=()=>panel.classList.add('open');
+document.getElementById('closePanel').onclick=()=>panel.classList.remove('open');
+document.getElementById('modeBtn').onclick=()=>{
+  mode=mode==='brawl'?'pubg':'brawl';
+  const b=document.getElementById('modeBtn');
+  b.innerHTML = mode==='brawl' ? 'Mode: Brawl<small>release stick to fire</small>'
+                               : 'Mode: PUBG<small>aim + index-finger trigger</small>';
+};
+
+const binds=[['move','vMove',v=>v],['turret','vTurret',v=>(+v).toFixed(2)],
+  ['body','vBody',v=>(+v).toFixed(2)],['shell','vShell',v=>v],['bounce','vBounce',v=>v],
+  ['cd','vCd',v=>v],['dz','vDz',v=>v],['rad','vRad',v=>v],['maxshell','vMax',v=>v]];
+function syncPanel(){
+  binds.forEach(([id,lbl,fmt])=>{const el=document.getElementById(id);
+    el.value=cfg[id]; document.getElementById(lbl).textContent=fmt(cfg[id]);});
+  document.getElementById('preview').checked=cfg.preview;
+  document.getElementById('haptics').checked=cfg.haptics;
+  document.getElementById('shake').checked=cfg.shake;
+}
+binds.forEach(([id,lbl,fmt])=>{const el=document.getElementById(id);
+  el.addEventListener('input',()=>{cfg[id]=parseFloat(el.value);
+    document.getElementById(lbl).textContent=fmt(cfg[id]);});});
+['preview','haptics','shake'].forEach(id=>{document.getElementById(id)
+  .addEventListener('change',e=>cfg[id]=e.target.checked);});
+document.getElementById('reset').onclick=()=>{Object.assign(cfg,DEFAULTS);syncPanel();};
+syncPanel();
+
+// ---- start: fullscreen + landscape lock ----
+document.getElementById('startBtn').onclick=async()=>{
+  try{ await document.documentElement.requestFullscreen(); }catch(e){}
+  try{ await screen.orientation.lock('landscape'); }catch(e){}
+  document.getElementById('start').style.display='none';
+  resize(); started=true; tank.aimTarget=tank.turretAngle;
+};
+resize();
+</script>
+</body>
+</html>

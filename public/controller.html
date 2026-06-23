@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Tank Arena — Controller</title>
+<style>
+  :root{ --ink:#2c2a26; --fire:#d9483b; }
+  *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;overflow:hidden;background:#1a1916;
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    user-select:none;-webkit-user-select:none;overscroll-behavior:none;}
+  #pad{display:block;touch-action:none;width:100vw;height:100vh;}
+  #hud{position:fixed;top:0;left:0;width:100%;pointer-events:none;
+    display:flex;justify-content:space-between;align-items:flex-start;
+    padding:max(10px,env(safe-area-inset-top)) 14px 0;z-index:5;font-size:13px;}
+  .pill{background:rgba(255,255,255,.7);backdrop-filter:blur(3px);border-radius:999px;
+    padding:6px 12px;font-weight:600;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.2);}
+  #modeBtn,#stickBtn{pointer-events:auto;cursor:pointer;border:none;font:inherit;background:var(--ink);
+    color:#f3ecd9;border-radius:999px;padding:8px 14px;font-weight:700;}
+  #modeBtn small,#stickBtn small{display:block;font-weight:500;opacity:.7;font-size:10px;margin-top:1px;}
+  #ctrlBtns{display:flex;gap:8px;}
+  #conn{display:flex;align-items:center;gap:6px;}
+  #dot{width:9px;height:9px;border-radius:50%;background:#d9a441;}
+  #dot.ok{background:#4a9d5b;} #dot.bad{background:#c0584a;}
+  #start{position:fixed;inset:0;z-index:30;background:#1a1916;color:#e9e2cf;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;padding:24px;gap:14px;}
+  #start h1{font-size:22px;font-weight:800;}
+  #start p{font-size:14px;opacity:.7;max-width:320px;line-height:1.5;}
+  #startBtn{margin-top:8px;padding:14px 30px;border:none;border-radius:12px;background:#3b6fb5;
+    color:#fff;font-size:16px;font-weight:700;cursor:pointer;}
+</style>
+</head>
+<body>
+<canvas id="pad"></canvas>
+<div id="hud">
+  <div class="pill" id="conn"><span id="dot"></span><span id="connTxt">connecting…</span></div>
+  <div id="ctrlBtns">
+    <button id="modeBtn">Brawl<small>release to fire</small></button>
+    <button id="stickBtn">Floating<small>tap = center</small></button>
+  </div>
+  <div class="pill" id="who">—</div>
+</div>
+<div id="start">
+  <h1>Tank Arena Controller</h1>
+  <p>Left thumb drives, right thumb aims. Toggle Brawl (release the aim stick to fire, release in the center to cancel) vs PUBG (aim only + the FIRE trigger, top-right).</p>
+  <button id="startBtn">Tap to join</button>
+</div>
+
+<script src="/shared/protocol.js"></script>
+<script>
+"use strict";
+const cv=document.getElementById('pad'), ctx=cv.getContext('2d');
+
+// ---- input-feel config (client-side; gameplay tunables live on the host) ----
+const cfg={ rad:80, dz:26, hold:60, haptics:true }; // hold = pubg fire repeat cooldown ms
+
+let W=0,H=0,DPR=1,mode='brawl',started=false,myColor='#3b6fb5',myId=null;
+let fixedStick=false; try{ fixedStick=localStorage.getItem('fixedStick')==='1'; }catch(e){}  // anchor sticks to each half's center
+let fireBtn={x:0,y:0,r:40}, lastPubgFire=0;
+let turret=-Math.PI/2;            // last committed aim (mirrors host's eased turret intent)
+
+function resize(){
+  DPR=Math.min(window.devicePixelRatio||1,2);
+  W=innerWidth;H=innerHeight;cv.width=W*DPR;cv.height=H*DPR;
+  cv.style.width=W+'px';cv.style.height=H+'px';ctx.setTransform(DPR,0,0,DPR,0,0);
+  fireBtn.x=W-58;fireBtn.y=64;
+}
+addEventListener('resize',resize);
+addEventListener('orientationchange',()=>setTimeout(resize,200));
+
+// ---- websocket ----
+let ws=null, wsReady=false;
+function connect(){
+  ws=new WebSocket(`ws://${location.host}`);
+  ws.onopen=()=>{ ws.send(JSON.stringify({type:'hello',role:'controller'})); setConn('ok','connected'); wsReady=true; };
+  ws.onclose=()=>{ setConn('bad','reconnecting…'); wsReady=false; setTimeout(connect,1000); };
+  ws.onerror=()=>setConn('bad','error');
+  ws.onmessage=(e)=>{ let m; try{m=JSON.parse(e.data);}catch{return;}
+    if(m.type==='assigned'){ myId=m.id; myColor=m.color;
+      document.getElementById('who').textContent='You are P'+m.id;
+      document.getElementById('who').style.color=m.color; }
+    if(m.type==='haptic' && cfg.haptics && navigator.vibrate) navigator.vibrate(m.pattern||[20]);
+  };
+}
+function setConn(s,t){ const d=document.getElementById('dot');
+  d.className=s==='ok'?'ok':s==='bad'?'bad':''; document.getElementById('connTxt').textContent=t; }
+function sendInput(mx,my,aim,aiming){ if(wsReady) ws.send(JSON.stringify({type:'input',mx,my,aim,aiming})); }
+function sendFire(aim){ if(wsReady) ws.send(JSON.stringify({type:'fire',aim})); }
+
+// ---- pointer -> stick role ----
+const pointers=new Map();
+function stickVec(p){ let dx=p.cx-p.bx,dy=p.cy-p.by; const d=Math.hypot(dx,dy)||1;
+  const c=Math.min(d,cfg.rad); return {x:dx/d*c,y:dy/d*c,mag:c,raw:d,ang:Math.atan2(dy,dx)}; }
+function inFireBtn(x,y){ return mode==='pubg'&&Math.hypot(x-fireBtn.x,y-fireBtn.y)<fireBtn.r+6; }
+function activePointer(role){ for(const p of pointers.values()) if(p.role===role) return p; return null; }
+
+cv.addEventListener('pointerdown',e=>{ if(!started)return; cv.setPointerCapture(e.pointerId);
+  const x=e.clientX,y=e.clientY;
+  if(inFireBtn(x,y)){ pointers.set(e.pointerId,{role:'fire'}); pubgFire(); return; }
+  const role=x<W/2?'move':'aim';
+  let bx=x,by=y;
+  if(fixedStick){ bx=role==='move'?W*0.25:W*0.75; by=H*0.5; }   // fixed: anchor to half-screen center
+  const p={role,bx,by,cx:x,cy:y}; pointers.set(e.pointerId,p);
+  if(role==='aim'){ const s=stickVec(p); if(s.raw>6) turret=s.ang; }  // fixed-tap already deflects aim
+});
+cv.addEventListener('pointermove',e=>{ const p=pointers.get(e.pointerId); if(!p||p.role==='fire')return;
+  p.cx=e.clientX;p.cy=e.clientY;
+  if(p.role==='aim'){ const s=stickVec(p); if(s.raw>6) turret=s.ang; }
+});
+function endPointer(e){ const p=pointers.get(e.pointerId); if(!p)return;
+  if(p.role==='aim'){ const s=stickVec(p);
+    if(mode==='brawl'&&s.mag>cfg.dz){ turret=s.ang; sendFire(turret); } }
+  pointers.delete(e.pointerId);
+}
+cv.addEventListener('pointerup',endPointer);
+cv.addEventListener('pointercancel',endPointer);
+
+function pubgFire(){ const now=performance.now(); if(now-lastPubgFire<cfg.hold)return;
+  lastPubgFire=now; sendFire(turret); if(cfg.haptics&&navigator.vibrate)navigator.vibrate(14); }
+
+// ---- input stream (~30Hz, only on change) ----
+let lastSent={mx:0,my:0,aim:0,aiming:false};
+setInterval(()=>{
+  if(!started||!wsReady)return;
+  const mp=activePointer('move'); let mx=0,my=0;
+  if(mp){ const s=stickVec(mp); const n=s.mag/cfg.rad; mx=Math.cos(s.ang)*n; my=Math.sin(s.ang)*n; }
+  const aiming=!!activePointer('aim');
+  const changed=Math.abs(mx-lastSent.mx)>0.02||Math.abs(my-lastSent.my)>0.02||
+                Math.abs(turret-lastSent.aim)>0.02||aiming!==lastSent.aiming;
+  if(changed){ sendInput(+mx.toFixed(3),+my.toFixed(3),+turret.toFixed(3),aiming);
+    lastSent={mx,my,aim:turret,aiming}; }
+}, 33);
+
+// ---- render: just the controls (the tank lives on the TV) ----
+function drawStick(p,color){ if(!p)return; const s=stickVec(p);
+  ctx.globalAlpha=.9;
+  ctx.beginPath();ctx.arc(p.bx,p.by,cfg.rad,0,7);ctx.strokeStyle='rgba(255,255,255,.5)';ctx.lineWidth=3;ctx.stroke();
+  ctx.beginPath();ctx.arc(p.bx,p.by,cfg.rad,0,7);ctx.fillStyle='rgba(255,255,255,.1)';ctx.fill();
+  ctx.beginPath();ctx.arc(p.bx+s.x,p.by+s.y,28,0,7);ctx.fillStyle=color;ctx.fill();ctx.globalAlpha=1;}
+function render(){
+  ctx.fillStyle='#23211d';ctx.fillRect(0,0,W,H);
+  // hint dividers
+  ctx.strokeStyle='rgba(255,255,255,.06)';ctx.lineWidth=1;
+  ctx.beginPath();ctx.moveTo(W/2,40);ctx.lineTo(W/2,H);ctx.stroke();
+  ctx.fillStyle='rgba(255,255,255,.18)';ctx.font='600 13px system-ui';ctx.textAlign='center';
+  ctx.fillText('DRIVE',W*0.25,H-22); ctx.fillText(mode==='pubg'?'AIM':'AIM • release = fire',W*0.75,H-22);
+  if(fixedStick){ ctx.globalAlpha=1;                       // show the fixed anchors at rest
+    for(const cx of [W*0.25,W*0.75]){ ctx.beginPath();ctx.arc(cx,H*0.5,cfg.rad,0,7);
+      ctx.strokeStyle='rgba(255,255,255,.13)';ctx.lineWidth=2;ctx.stroke(); } }
+  drawStick(activePointer('move'),myColor);
+  drawStick(activePointer('aim'),'rgba(217,72,59,.92)');
+  if(mode==='pubg'){ const held=activePointer('fire');
+    ctx.beginPath();ctx.arc(fireBtn.x,fireBtn.y,fireBtn.r,0,7);
+    ctx.fillStyle=held?'rgba(217,72,59,.95)':'rgba(217,72,59,.78)';ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,.8)';ctx.lineWidth=3;ctx.stroke();
+    ctx.fillStyle='#fff';ctx.font='600 12px system-ui';ctx.textBaseline='middle';
+    ctx.fillText('FIRE',fireBtn.x,fireBtn.y); }
+  requestAnimationFrame(render);
+}
+requestAnimationFrame(render);
+
+// ---- ui ----
+document.getElementById('modeBtn').onclick=()=>{ mode=mode==='brawl'?'pubg':'brawl';
+  document.getElementById('modeBtn').innerHTML = mode==='brawl'
+    ? 'Brawl<small>release to fire</small>' : 'PUBG<small>aim + trigger</small>'; };
+function stickLabel(){ document.getElementById('stickBtn').innerHTML = fixedStick
+  ? 'Fixed<small>center anchor</small>' : 'Floating<small>tap = center</small>'; }
+document.getElementById('stickBtn').onclick=()=>{ fixedStick=!fixedStick;
+  try{ localStorage.setItem('fixedStick',fixedStick?'1':'0'); }catch(e){} stickLabel(); };
+stickLabel();
+document.getElementById('startBtn').onclick=async()=>{
+  try{ await document.documentElement.requestFullscreen(); }catch(e){}
+  try{ await screen.orientation.lock('landscape'); }catch(e){}
+  document.getElementById('start').style.display='none'; resize(); started=true;
+};
+resize(); connect();
+</script>
+</body>
+</html>
