@@ -5,7 +5,7 @@ enemies that differ along **movement, bullet behaviour, fire cadence, aiming int
 area-denial (mines)** — and feed them into the wave system so difficulty comes from *mixing types*,
 not buffing one. Source research: see chat / `CLAUDE.md` open question #3.
 
-## Baseline (what exists today, in `public/host.html`)
+## Baseline (what exists today, in `lan/public/host.html`)
 
 - Enemies are just tanks with `.enemy = true`, living in the same `tanks` Map.
 - `spawnEnemy()` builds one hard-coded enemy. `driveEnemy(t,now)` is the only AI: seek nearest

@@ -1,0 +1,7 @@
+# Only web/ is deployed (vercel.json outputDirectory). Keep the LAN server,
+# the feel-test baseline, node_modules, and docs out of the upload.
+node_modules
+lan
+reference
+*.bat
+*.md

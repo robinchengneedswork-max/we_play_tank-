@@ -8,23 +8,42 @@ This file is the source of truth for architecture and decisions. Read it before 
 
 ---
 
+## Repo layout (two builds)
+
+The repo holds **two separate builds** of the game, plus the feel baseline:
+
+- **`web/`** — the **single-player** build, deployed to **Vercel** (static, no server). Phones (or
+  anyone) load it from the Vercel URL — your tank + targets, twin-stick on one screen. It is a
+  faithful Phase-1 modular extraction of `reference/` into the project module pattern
+  (`web/src/{config,state,input,logic,render,ui,main}.js` + `index.html` + `style.css`). No
+  `audio.js` yet — the reference has haptics only, no synthesized sound (known gap vs the LAN host).
+- **`lan/`** — the **LAN multiplayer** build (`lan/server/` + `lan/public/`). Needs Node; Vercel
+  can't host the persistent `ws` server, so this runs locally only.
+- **`reference/`** — the feel baseline. Untouched.
+
+### Deploy
+`vercel.json` sets `outputDirectory: "web"` (no build step) so Vercel publishes only `web/`.
+`.vercelignore` keeps `lan/`, `reference/`, `node_modules`, docs out of the upload. Vercel is wired
+to the GitHub repo `robinchengneedswork-max/we_play_tank-` (branch `main`) → push = deploy.
+
 ## Current state of the repo
 
 - `reference/tank-controller-test.html` — the **proven single-file feel-test**. It already nails
   the input feel (twin sticks, two fire models, bouncing shells, juice). It is the canonical
   reference for *how the controls should feel*. Do not "improve" feel by guessing — match this.
-- `public/controller.html` — the feel-test's input layer, **ported to send intent over WebSocket**
+  `web/` is the modularized port of this file.
+- `lan/public/controller.html` — the feel-test's input layer, **ported to send intent over WebSocket**
   instead of driving a local tank. Both fire models intact, plus a **Floating/Fixed stick toggle**
   (Fixed anchors each stick to its half-screen center; choice persisted in `localStorage`).
-- `public/host.html` — **simulation authority**. Multi-tank port of the reference physics, driven
+- `lan/public/host.html` — **simulation authority**. Multi-tank port of the reference physics, driven
   by network input. Renders the board, shows the join URL + **QR code** + roster, sends haptics on
   hits. Now also has: **PvP deathmatch** and **PvE wave-defense** modes (top-center toggle), a local
   **keyboard player** (WASD move · ←/→ rotate turret · space fire), **synthesized sound** (fire /
   ricochet / death), **shell-vs-shell cancellation**, and player **friendly fire**. Playable PoC.
-- `public/shared/qrcode.js` — vendored offline QR generator (MIT, Kazuhiko Arase). No CDN at runtime.
+- `lan/public/shared/qrcode.js` — vendored offline QR generator (MIT, Kazuhiko Arase). No CDN at runtime.
 - `ENEMY-TYPES-SPRINT.md` — the plan for turning the single generic enemy into the *Tanks!* roster.
-- `server/server.js` — dumb WebSocket relay + static file server + LAN-IP discovery. Stable.
-- `public/shared/protocol.js` — the wire protocol, documented in one place.
+- `lan/server/server.js` — dumb WebSocket relay + static file server + LAN-IP discovery. Stable.
+- `lan/public/shared/protocol.js` — the wire protocol, documented in one place.
 
 ---
 
@@ -53,7 +72,7 @@ host can print a join URL.
 
 ## Wire protocol
 
-Full shapes live in `public/shared/protocol.js`. Summary:
+Full shapes live in `lan/public/shared/protocol.js`. Summary:
 
 - Handshake: each socket sends `{type:"hello", role:"host"|"controller"}`. Server replies to a
   controller with `{type:"assigned", id, color}` and tells the host `{type:"join", id, color, name}`.

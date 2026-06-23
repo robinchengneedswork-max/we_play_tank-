@@ -27,7 +27,7 @@ start "" /b cmd /c "timeout /t 2 >nul & start http://localhost:3000/host"
 
 echo Starting server...  (close this window to stop the game)
 echo.
-node server\server.js
+node lan\server\server.js
 
 echo.
 echo Server stopped.
