@@ -80,8 +80,14 @@ function render(){
   ctx.globalAlpha=1;
   // enemies
   for(const e of enemies){
-    ctx.globalAlpha = e.invisible ? 0.22 : 1;   // TODO(M3): true invisibility + muzzle-flash reveal
-    drawTank(e, e.color, darken(e.color,0.6));
+    if(e.spawning){                              // warp-in telegraph during the countdown
+      ctx.globalAlpha=0.5; drawTank(e, e.color, darken(e.color,0.6));
+      ctx.globalAlpha=0.7; ctx.beginPath();ctx.arc(e.x,e.y,e.r+8,0,7);
+      ctx.strokeStyle=e.color;ctx.lineWidth=2;ctx.setLineDash([4,5]);ctx.stroke();ctx.setLineDash([]);
+    } else {
+      ctx.globalAlpha = e.invisible ? 0.22 : 1;  // TODO(M3): true invisibility + muzzle-flash reveal
+      drawTank(e, e.color, darken(e.color,0.6));
+    }
     ctx.globalAlpha = 1;
   }
   // shells
@@ -107,6 +113,13 @@ function render(){
     ctx.strokeStyle='rgba(255,255,255,.8)';ctx.lineWidth=3;ctx.stroke();
     ctx.fillStyle='#fff';ctx.font='600 12px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
     ctx.fillText('FIRE',fireBtn.x,fireBtn.y);
+  }
+  // wave countdown banner (screen-fixed, drawn outside the shake transform)
+  if(gameMode==='roguelike' && run.phase==='intermission'){
+    ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=getCSS('--ink');
+    ctx.font='800 26px system-ui';ctx.fillText('WAVE '+run.level, W/2, H/2-18);
+    ctx.font='800 44px system-ui';ctx.fillText(Math.max(1,Math.ceil(run.timer/1000)), W/2, H/2+24);
+    ctx.restore();
   }
 }
 const cssCache={};

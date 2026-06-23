@@ -120,8 +120,13 @@ function update(dt){
   }
   // auto-fire: hold the aim stick past the ring to keep firing on cooldown
   if(cfg.autofire){ const ap=activePointer('aim'); if(ap && stickVec(ap).raw>cfg.rad) tryFire(); }
-  // ---- enemies ----
-  for(const e of enemies){ driveEnemy(e, now); moveEnemy(e, dt); }
+  // ---- wave intermission (breather + countdown while enemies warp in) ----
+  if(gameMode==='roguelike' && run.phase==='intermission'){
+    run.timer-=dt*1000;
+    if(run.timer<=0){ run.phase='fighting'; for(const e of enemies) e.spawning=false; }
+  }
+  // ---- enemies (inert while warping in) ----
+  for(const e of enemies){ if(e.spawning) continue; driveEnemy(e, now); moveEnemy(e, dt); }
   // ---- shells ----
   for(let i=shells.length-1;i>=0;i--){
     const sh=shells[i]; sh.life-=dt; if(sh.life<=0){shells.splice(i,1);continue;}
@@ -132,7 +137,7 @@ function update(dt){
       // hit an opposing tank?
       let victim=null;
       if(sh.team!=='player' && Math.hypot(sh.x-tank.x,sh.y-tank.y)<tank.r+4) victim=tank;
-      if(!victim){ for(const e of enemies){ if(sh.team!==e.team && Math.hypot(sh.x-e.x,sh.y-e.y)<e.r+4){ victim=e; break; } } }
+      if(!victim){ for(const e of enemies){ if(sh.team!==e.team && !e.spawning && Math.hypot(sh.x-e.x,sh.y-e.y)<e.r+4){ victim=e; break; } } }
       if(victim){ damageTank(victim,1); dead=true; break; }
       if(dead)break;
     }

@@ -18,7 +18,10 @@ The repo holds **two separate builds** of the game, plus the feel baseline:
   `audio.js` yet — the reference has haptics only, no synthesized sound (known gap vs the LAN host).
   Has a **menu/screen system** (`menu.js`, `.screen`/`.active` + `showScreen`) with two modes
   (`gameMode` in config): **Sandbox** (respawning test range of enemy types) and **Roguelike**
-  (`run` state in `state.js` — escalating waves, 3 HP, death→menu; level/kills/hp HUD).
+  (`run` state in `state.js` — escalating waves with an inter-wave countdown breather
+  (`run.phase` intermission/fighting; enemies "warp in" inert+invulnerable while `run.timer` runs),
+  wave 1 = Browns only, 3 HP, death→menu; level/kills/hp HUD). Landscape-first (portrait shows a
+  rotate overlay + `orientation.lock` attempt).
   Settings = the same tuning panel, opened from the menu and the in-game gear.
   **T0 enemy roster is in** (`data/types.js` `TYPES` + multi-tank combat base): `enemies[]`,
   team-tagged shells, `spawnEnemy`, generic `fire(t,aim)` (player feel unchanged via `?? cfg`

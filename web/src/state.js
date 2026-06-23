@@ -12,8 +12,9 @@ let score=0;
 let shake=0;
 
 // Roguelike run state (scaffold — grows with the run system: upgrades, biomes, etc.)
-const run={ level:1, kills:0, hp:3, maxHp:3 };
-function resetRun(){ run.level=1; run.kills=0; run.maxHp=3; run.hp=run.maxHp; }
+const run={ level:1, kills:0, hp:3, maxHp:3, phase:'fighting', timer:0 };
+function resetRun(){ run.level=1; run.kills=0; run.maxHp=3; run.hp=run.maxHp; run.phase='fighting'; run.timer=0; }
+const INTERMISSION_MS=2600;   // breather + countdown before a wave goes live
 
 // ---- enemy spawning ----
 function spawnEnemy(typeName, x, y){
@@ -54,19 +55,25 @@ function spawnSandboxSet(){
 
 // Roguelike waves. Minimal ramp for now — full composition table is sprint T7.
 function waveRoster(level){
-  const out=[]; const n=Math.min(2+Math.ceil(level*1.2),10);
+  if(level<=1) return ['brown','brown','brown'];      // gentle opener: lazy stationary tanks
+  const out=[]; const n=Math.min(3+Math.ceil((level-1)*1.2),10);
   for(let i=0;i<n;i++){
     const r=Math.random(); let tp;
-    if(level<=1)      tp = r<0.6 ?'brown':'grey';
-    else if(level<=3) tp = r<0.4 ?'grey' : r<0.7?'brown':'teal';
-    else if(level<=5) tp = r<0.35?'grey' : r<0.6?'red'  : r<0.8?'teal':'yellow';
+    if(level<=2)      tp = r<0.5 ?'brown':'grey';
+    else if(level<=4) tp = r<0.4 ?'grey' : r<0.7?'brown':'teal';
+    else if(level<=6) tp = r<0.35?'grey' : r<0.6?'red'  : r<0.8?'teal':'yellow';
     else              tp = r<0.25?'red'  : r<0.45?'teal': r<0.6?'green': r<0.78?'purple': r<0.9?'yellow':'grey';
     out.push(tp);
   }
   return out;
 }
-function spawnWave(){ waveRoster(run.level).forEach(tp=>{ const p=randSpawnPos(); spawnEnemy(tp,p.x,p.y); }); }
-function nextWave(){ run.level++; updateHud(); spawnWave(); }
+// Spawn the current level's wave in "warp-in" state and start the countdown.
+function beginWave(){
+  waveRoster(run.level).forEach(tp=>{ const p=randSpawnPos(); const e=spawnEnemy(tp,p.x,p.y); if(e) e.spawning=true; });
+  run.phase='intermission'; run.timer=INTERMISSION_MS;
+  updateHud();
+}
+function nextWave(){ run.level++; beginWave(); }
 
 // Reset the arena for a fresh start of either mode.
 function resetArena(){
@@ -76,7 +83,7 @@ function resetArena(){
   tank.team='player'; tank.lastFire=0; tank.fireSlowUntil=0; tank.maxHp=run.maxHp; tank.hp=run.maxHp;
   score=0;
   if(gameMode==='sandbox')        spawnSandboxSet();
-  else if(gameMode==='roguelike') spawnWave();
+  else if(gameMode==='roguelike') beginWave();
 }
 
 function layoutObstacles(){
