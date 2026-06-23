@@ -78,6 +78,7 @@ deep run mechanics. The run/upgrade meta-structure is engine-agnostic and lives 
   ricochet / death), **shell-vs-shell cancellation**, and player **friendly fire**. Playable PoC.
 - `lan/public/shared/qrcode.js` — vendored offline QR generator (MIT, Kazuhiko Arase). No CDN at runtime.
 - `ENEMY-TYPES-SPRINT.md` — the plan for turning the single generic enemy into the *Tanks!* roster.
+- `MAPS-SPRINT.md` — the plan for tile-based maps + terrain (blocks, holes) + a map library.
 - `lan/server/server.js` — dumb WebSocket relay + static file server + LAN-IP discovery. Stable.
 - `lan/public/shared/protocol.js` — the wire protocol, documented in one place.
 
