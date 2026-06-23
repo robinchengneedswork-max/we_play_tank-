@@ -13,10 +13,32 @@ let tracks=[];           // tread marks {x,y,a,life,max} — fade out; cleared b
 let score=0;
 let shake=0;
 
-// Roguelike run state (scaffold — grows with the run system: upgrades, biomes, etc.)
-const run={ level:1, kills:0, hp:3, maxHp:3, phase:'fighting', timer:0 };
-function resetRun(){ run.level=1; run.kills=0; run.maxHp=3; run.hp=run.maxHp; run.phase='fighting'; run.timer=0; }
+// Roguelike run state. `mods` are the player's run upgrades, layered over cfg
+// as multipliers/adders (so cfg stays the live-tunable baseline; sandbox = baseline).
+const run={ level:1, kills:0, hp:3, maxHp:3, phase:'fighting', timer:0, mods:freshMods() };
+function freshMods(){ return {move:1, turret:1, cd:1, shell:1, maxShells:0, bounce:0, fireSlow:1}; }
+function resetRun(){
+  run.level=1; run.kills=0; run.maxHp=3; run.hp=run.maxHp;
+  run.phase='fighting'; run.timer=0; run.mods=freshMods();
+}
 const INTERMISSION_MS=2600;   // breather + countdown before a wave goes live
+
+// Upgrade pool offered between waves. apply() mutates run.mods (or HP).
+const UPGRADES=[
+  {name:'Treads',      desc:'+20% move speed',    apply(){ run.mods.move*=1.2; }},
+  {name:'Gyro',        desc:'+25% turret turn',   apply(){ run.mods.turret*=1.25; }},
+  {name:'Autoloader',  desc:'-18% fire cooldown', apply(){ run.mods.cd*=0.82; }},
+  {name:'Hi-Velocity', desc:'+20% shell speed',   apply(){ run.mods.shell*=1.2; }},
+  {name:'Magazine',    desc:'+1 shell on screen', apply(){ run.mods.maxShells+=1; }},
+  {name:'Ricochet',    desc:'+1 ricochet',        apply(){ run.mods.bounce+=1; }},
+  {name:'Plating',     desc:'+1 max HP & heal',   apply(){ run.maxHp+=1; run.hp=run.maxHp; tank.maxHp=run.maxHp; tank.hp=run.maxHp; }},
+  {name:'Recoil damp', desc:'-50% fire slow',     apply(){ run.mods.fireSlow*=0.5; }},
+];
+function pickUpgrades(n){
+  const pool=[...UPGRADES], out=[];
+  for(let i=0;i<n && pool.length;i++) out.push(pool.splice(Math.floor(Math.random()*pool.length),1)[0]);
+  return out;
+}
 
 // ---- enemy spawning ----
 function spawnEnemy(typeName, x, y){

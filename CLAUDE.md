@@ -20,8 +20,12 @@ The repo holds **two separate builds** of the game, plus the feel baseline:
   (`gameMode` in config): **Sandbox** (respawning test range of enemy types) and **Roguelike**
   (`run` state in `state.js` — escalating waves with an inter-wave countdown breather
   (`run.phase` intermission/fighting; enemies "warp in" inert+invulnerable while `run.timer` runs),
-  wave 1 = Browns only, 3 HP, death→menu; level/kills/hp HUD). Landscape-first (portrait shows a
-  rotate overlay + `orientation.lock` attempt).
+  wave 1 = Browns only, 3 HP, death→menu; level/kills/hp HUD). **Between waves you pick 1 of 3
+  upgrades** (`UPGRADES`/`pickUpgrades` in state.js; `offerUpgrade` overlay in ui.js; `run.phase==='upgrade'`
+  pauses the sim). Upgrades are `run.mods` (multipliers/adders) layered over cfg via player
+  effective-stat helpers `pMove/pTurret/pCd/pShell/pBounce/pMaxShells` in logic.js — so cfg stays the
+  live-tunable baseline and the player's no-upgrade feel is unchanged. Landscape-first (portrait shows
+  a rotate overlay + `orientation.lock` attempt).
   Settings = the same tuning panel, opened from the menu and the in-game gear.
   **Full enemy roster done (T0–M3, T11 dodging skipped).** `data/types.js` `TYPES` + multi-tank
   combat base: `enemies[]`, team-tagged shells, `spawnEnemy`, generic `fire(t,aim)` (player feel

@@ -22,7 +22,7 @@ async function startMode(m){
   showScreen(null);
   hud.classList.remove('hud-hidden');
   resize();                 // size canvas + lay out obstacles for current orientation
-  if(m==='roguelike') resetRun();
+  resetRun();               // reset run state + upgrade mods (both modes start at baseline)
   resetArena();
   setHudForMode();
   updateHud();

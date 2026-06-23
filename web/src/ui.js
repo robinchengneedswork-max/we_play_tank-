@@ -57,3 +57,19 @@ function updateHud(){
   elHits.textContent='Hits '+score;
   elRun.textContent='Lv '+run.level+' · '+run.kills+' kills · '+'♥'.repeat(run.hp);
 }
+
+// ---- between-wave upgrade pick (3 cards; pauses the sim via run.phase==='upgrade') ----
+const upOverlay=document.getElementById('upgrade');
+const upCards=document.getElementById('upgradeCards');
+function offerUpgrade(){
+  run.phase='upgrade';
+  upCards.innerHTML='';
+  pickUpgrades(3).forEach(u=>{
+    const b=document.createElement('button');
+    b.className='up-card';
+    b.innerHTML='<b>'+u.name+'</b><small>'+u.desc+'</small>';
+    b.onclick=()=>{ u.apply(); updateHud(); upOverlay.classList.remove('active'); nextWave(); };
+    upCards.appendChild(b);
+  });
+  upOverlay.classList.add('active');
+}

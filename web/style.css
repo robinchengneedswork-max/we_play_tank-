@@ -61,6 +61,19 @@ html,body{height:100%;overflow:hidden;background:#1a1916;
   font-size:18px;font-weight:700;line-height:1.5;touch-action:none;}
 #calib.active{display:flex;}
 
+/* Between-wave upgrade pick */
+#upgrade{position:fixed;inset:0;z-index:45;display:none;flex-direction:column;align-items:center;
+  justify-content:center;gap:18px;padding:24px;background:rgba(20,19,16,.72);color:#f3ecd9;touch-action:none;}
+#upgrade.active{display:flex;}
+#upgrade h2{font-size:18px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;opacity:.82;}
+#upgradeCards{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;max-width:600px;}
+.up-card{cursor:pointer;border:none;font:inherit;text-align:left;width:min(42vw,170px);
+  background:#2c2925;color:#f3ecd9;border-radius:14px;padding:15px 16px;box-shadow:0 3px 0 rgba(0,0,0,.35);
+  transition:transform .08s ease;}
+.up-card b{display:block;font-size:16px;font-weight:800;margin-bottom:6px;color:var(--tank);}
+.up-card small{font-size:12.5px;opacity:.78;line-height:1.45;}
+.up-card:active{transform:translateY(2px);box-shadow:0 1px 0 rgba(0,0,0,.35);}
+
 /* Landscape-first: cover the screen with a rotate prompt while in portrait */
 #rotate{display:none;}
 @media (orientation:portrait){

@@ -1,15 +1,24 @@
 "use strict";
 // logic — firing, enemy AI, shell physics, per-frame world update, combat resolution.
 
-// Generic fire: any tank shoots along `aim`. Reads per-tank stats, falling back
-// to cfg for tanks that don't define them (i.e. the player) — so player feel is
-// unchanged. tryFire() is the player's wrapper.
+// Player effective stats = cfg baseline × run upgrade mods (mods default to 1/0,
+// so with no upgrades the player is exactly cfg — live tuning + sandbox unchanged).
+function pMove(){   return cfg.move    * run.mods.move; }
+function pTurret(){ return cfg.turret  * run.mods.turret; }
+function pCd(){     return cfg.cd      * run.mods.cd; }
+function pShell(){  return cfg.shell   * run.mods.shell; }
+function pBounce(){ return cfg.bounce  + run.mods.bounce; }
+function pMaxShells(){ return Math.round(cfg.maxshell + run.mods.maxShells); }
+
+// Generic fire: any tank shoots along `aim`. Enemies read their per-tank stats;
+// the player reads cfg×mods. tryFire() is the player's wrapper.
 function fire(t, aim){
   const now=performance.now();
-  const cd        = t.cd        ?? cfg.cd;
-  const maxShells = t.maxShells ?? cfg.maxshell;
-  const speed     = t.shellSpeed?? cfg.shell;
-  const bounce    = t.bounce    ?? cfg.bounce;
+  const isP=(t===tank);
+  const cd        = isP? pCd()        : (t.cd        ?? cfg.cd);
+  const maxShells = isP? pMaxShells() : (t.maxShells ?? cfg.maxshell);
+  const speed     = isP? pShell()     : (t.shellSpeed?? cfg.shell);
+  const bounce    = isP? pBounce()    : (t.bounce    ?? cfg.bounce);
   if(now-(t.lastFire||0) < cd) return;
   let own=0; for(const s of shells) if(s.owner===t) own++;
   if(own>=maxShells) return;
@@ -168,9 +177,11 @@ function reflectStep(o,nx,ny,dt){
 
 function update(dt){
   const now=performance.now();
+  if(gameMode==='roguelike' && run.phase==='upgrade') return;   // paused while choosing an upgrade
   // ---- player movement ----
   // recoil brake: speed drops for a moment after firing
-  const moveSpeed = now<tank.fireSlowUntil ? Math.max(20, cfg.move-cfg.fireSlow) : cfg.move;
+  const baseMove = pMove();
+  const moveSpeed = now<tank.fireSlowUntil ? Math.max(20, baseMove-cfg.fireSlow*run.mods.fireSlow) : baseMove;
   const mp=activePointer('move');
   if(mp){ const s=stickVec(mp); const n=s.mag/cfg.rad;
     tank.vx=Math.cos(s.ang)*moveSpeed*n; tank.vy=Math.sin(s.ang)*moveSpeed*n;
@@ -191,7 +202,7 @@ function update(dt){
   // turret easing toward aim target
   if(tank.aimTarget!==undefined){
     let d=((tank.aimTarget-tank.turretAngle+Math.PI)%(2*Math.PI))-Math.PI;
-    tank.turretAngle+=d*cfg.turret;
+    tank.turretAngle+=d*pTurret();
   }
   trailTank(tank,dt);
   // auto-fire: hold the aim stick past the ring to keep firing on cooldown
@@ -266,7 +277,7 @@ function killEnemy(e){
   burst(e.x,e.y,e.color,16);
   if(cfg.shake) shake=Math.min(shake+6,11);
   if(cfg.haptics&&navigator.vibrate) navigator.vibrate([12,28,12]);
-  if(gameMode==='roguelike'){ run.kills++; updateHud(); if(enemies.length===0) nextWave(); }
+  if(gameMode==='roguelike'){ run.kills++; updateHud(); if(enemies.length===0) offerUpgrade(); }
   else if(gameMode==='sandbox'){ updateHud(); const p=randSpawnPos(); spawnEnemy(e.type,p.x,p.y); }
 }
 function onPlayerDeath(){
