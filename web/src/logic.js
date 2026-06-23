@@ -20,11 +20,19 @@ function fire(t, aim){
   for(let i=0;i<6;i++){const sp=60+Math.random()*120,ang=aim+(Math.random()-0.5)*0.7;
     particles.push({x:tipX,y:tipY,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,life:0.25,c:'#e8b24a'});}
   if(t.team==='player'){
+    tank.fireSlowUntil = now + cfg.fireSlowMs;   // firing brakes movement briefly
     if(cfg.shake) shake=Math.min(shake+5,9);
     if(cfg.haptics&&navigator.vibrate) navigator.vibrate(18);
   }
 }
 function tryFire(){ fire(tank, tank.turretAngle); }
+
+// soft puff dropped behind a moving shell (velocity-feel trail)
+function addSmoke(x,y){
+  smoke.push({ x:x+(Math.random()-0.5)*3, y:y+(Math.random()-0.5)*3,
+    vx:(Math.random()-0.5)*14, vy:(Math.random()-0.5)*14, life:0.45, max:0.45,
+    r:2.5+Math.random()*1.5 });
+}
 
 // ---- enemy AI (base: seek-to-engage + track/none aim). predict/mines/invisible = TODO M2/M3 ----
 function scheduleFire(e,now){ e.nextFireAt = now + e.fireGap[0] + Math.random()*(e.fireGap[1]-e.fireGap[0]); }
@@ -86,9 +94,11 @@ function reflectStep(o,nx,ny,dt){
 function update(dt){
   const now=performance.now();
   // ---- player movement ----
+  // recoil brake: speed drops for a moment after firing
+  const moveSpeed = now<tank.fireSlowUntil ? Math.max(20, cfg.move-cfg.fireSlow) : cfg.move;
   const mp=activePointer('move');
   if(mp){ const s=stickVec(mp); const n=s.mag/cfg.rad;
-    tank.vx=Math.cos(s.ang)*cfg.move*n; tank.vy=Math.sin(s.ang)*cfg.move*n;
+    tank.vx=Math.cos(s.ang)*moveSpeed*n; tank.vy=Math.sin(s.ang)*moveSpeed*n;
     const target=s.ang; let d=((target-tank.bodyAngle+Math.PI)%(2*Math.PI))-Math.PI;
     tank.bodyAngle+=d*cfg.body;
   } else { tank.vx*=0.8; tank.vy*=0.8; }
@@ -108,6 +118,8 @@ function update(dt){
     let d=((tank.aimTarget-tank.turretAngle+Math.PI)%(2*Math.PI))-Math.PI;
     tank.turretAngle+=d*cfg.turret;
   }
+  // auto-fire: hold the aim stick past the ring to keep firing on cooldown
+  if(cfg.autofire){ const ap=activePointer('aim'); if(ap && stickVec(ap).raw>cfg.rad) tryFire(); }
   // ---- enemies ----
   for(const e of enemies){ driveEnemy(e, now); moveEnemy(e, dt); }
   // ---- shells ----
@@ -124,8 +136,12 @@ function update(dt){
       if(victim){ damageTank(victim,1); dead=true; break; }
       if(dead)break;
     }
-    if(dead) shells.splice(i,1);
+    if(dead){ shells.splice(i,1); continue; }
+    addSmoke(sh.x,sh.y);   // trail behind surviving shells
   }
+  // smoke trails
+  for(let i=smoke.length-1;i>=0;i--){const s=smoke[i];s.life-=dt;
+    if(s.life<=0){smoke.splice(i,1);continue;} s.x+=s.vx*dt;s.y+=s.vy*dt;s.vx*=0.92;s.vy*=0.92;}
   // particles
   for(let i=particles.length-1;i>=0;i--){const p=particles[i];p.life-=dt;
     if(p.life<=0){particles.splice(i,1);continue;} p.x+=p.vx*dt;p.y+=p.vy*dt;p.vx*=0.9;p.vy*=0.9;}

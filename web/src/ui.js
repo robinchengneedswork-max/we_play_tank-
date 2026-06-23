@@ -13,21 +13,42 @@ document.getElementById('modeBtn').onclick=()=>{
 
 const binds=[['move','vMove',v=>v],['turret','vTurret',v=>(+v).toFixed(2)],
   ['body','vBody',v=>(+v).toFixed(2)],['shell','vShell',v=>v],['bounce','vBounce',v=>v],
-  ['cd','vCd',v=>v],['dz','vDz',v=>v],['rad','vRad',v=>v],['maxshell','vMax',v=>v]];
+  ['cd','vCd',v=>v],['dz','vDz',v=>v],['rad','vRad',v=>v],['maxshell','vMax',v=>v],
+  ['fireSlow','vFireSlow',v=>v],['fireSlowMs','vFireSlowMs',v=>v]];
+const TOGGLES=['preview','haptics','shake','fixedStick','autofire'];
 function syncPanel(){
   binds.forEach(([id,lbl,fmt])=>{const el=document.getElementById(id);
     el.value=cfg[id]; document.getElementById(lbl).textContent=fmt(cfg[id]);});
-  document.getElementById('preview').checked=cfg.preview;
-  document.getElementById('haptics').checked=cfg.haptics;
-  document.getElementById('shake').checked=cfg.shake;
+  TOGGLES.forEach(id=>document.getElementById(id).checked=cfg[id]);
 }
 binds.forEach(([id,lbl,fmt])=>{const el=document.getElementById(id);
   el.addEventListener('input',()=>{cfg[id]=parseFloat(el.value);
-    document.getElementById(lbl).textContent=fmt(cfg[id]);});});
-['preview','haptics','shake'].forEach(id=>{document.getElementById(id)
-  .addEventListener('change',e=>cfg[id]=e.target.checked);});
-document.getElementById('reset').onclick=()=>{Object.assign(cfg,DEFAULTS);syncPanel();};
+    document.getElementById(lbl).textContent=fmt(cfg[id]); savePrefs();});});
+TOGGLES.forEach(id=>{document.getElementById(id)
+  .addEventListener('change',e=>{cfg[id]=e.target.checked; savePrefs();});});
+document.getElementById('reset').onclick=()=>{Object.assign(cfg,DEFAULTS);syncPanel();savePrefs();};
 syncPanel();
+
+// ---- fixed-stick center calibration (2 taps: left thumb, then right thumb) ----
+const calib=document.getElementById('calib');
+const calibText=document.getElementById('calibText');
+let calibStep=null;
+document.getElementById('calibBtn').onclick=()=>{
+  panel.classList.remove('open');
+  calibStep='move'; calibText.textContent='Tap where your LEFT thumb sits (move stick)';
+  calib.classList.add('active');
+};
+calib.addEventListener('pointerdown',e=>{
+  const x=e.clientX, y=e.clientY;
+  if(calibStep==='move'){
+    cfg.moveCx=x/W; cfg.moveCy=y/H; calibStep='aim';
+    calibText.textContent='Now tap where your RIGHT thumb sits (aim stick)';
+  } else if(calibStep==='aim'){
+    cfg.aimCx=x/W; cfg.aimCy=y/H; calibStep=null;
+    calib.classList.remove('active');
+    cfg.fixedStick=true; savePrefs(); syncPanel();   // defining centers turns Fixed on
+  }
+});
 
 // ---- HUD stat pills (sandbox: hits · roguelike: level/kills) ----
 const elHits=document.getElementById('statHits');

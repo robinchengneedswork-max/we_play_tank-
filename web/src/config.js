@@ -12,9 +12,20 @@ const ctx = cv.getContext('2d');
 // earmarked as run upgrades, and turret lag couples to fire-on-release accuracy.
 const DEFAULTS = {
   move:180, turret:0.35, body:0.18, shell:310, bounce:2,
-  cd:260, dz:26, rad:80, maxshell:5, preview:true, haptics:true, shake:true
+  cd:260, dz:26, rad:80, maxshell:5, preview:true, haptics:true, shake:true,
+  fixedStick:false, autofire:false,           // input prefs (persisted)
+  fireSlow:90, fireSlowMs:250,                 // firing brakes movement
+  moveCx:0.20, moveCy:0.70, aimCx:0.80, aimCy:0.70  // fixed-stick centers (fractions of W,H)
 };
 const cfg = {...DEFAULTS};
+
+// ---- persisted player prefs (input feel survives reloads, like the LAN controller) ----
+const PREF_KEYS=['fixedStick','autofire','fireSlow','fireSlowMs','moveCx','moveCy','aimCx','aimCy'];
+function savePrefs(){ try{ const o={}; for(const k of PREF_KEYS) o[k]=cfg[k];
+  localStorage.setItem('tankPrefs',JSON.stringify(o)); }catch(e){} }
+function loadPrefs(){ try{ const s=localStorage.getItem('tankPrefs'); if(!s) return;
+  const o=JSON.parse(s); for(const k of PREF_KEYS) if(o[k]!==undefined) cfg[k]=o[k]; }catch(e){} }
+loadPrefs();
 
 const FRAME = 18;                 // board inner margin (px)
 

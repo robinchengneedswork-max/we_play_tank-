@@ -17,7 +17,13 @@ cv.addEventListener('pointerdown',e=>{
   const x=e.clientX,y=e.clientY;
   if(inFireBtn(x,y)){ pointers.set(e.pointerId,{role:'fire'}); tryFire(); return; }
   const role = x < W/2 ? 'move' : 'aim';
-  pointers.set(e.pointerId,{role,bx:x,by:y,cx:x,cy:y});
+  // Floating: base = touch point. Fixed: base = the stick's defined center.
+  let bx=x, by=y;
+  if(cfg.fixedStick){
+    if(role==='move'){ bx=cfg.moveCx*W; by=cfg.moveCy*H; }
+    else            { bx=cfg.aimCx*W;  by=cfg.aimCy*H; }
+  }
+  pointers.set(e.pointerId,{role,bx,by,cx:x,cy:y});
 });
 cv.addEventListener('pointermove',e=>{
   const p=pointers.get(e.pointerId); if(!p||p.role==='fire')return;

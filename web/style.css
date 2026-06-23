@@ -51,6 +51,15 @@ html,body{height:100%;overflow:hidden;background:#1a1916;
   color:#e9e2cf;font-size:22px;cursor:pointer;opacity:.7;}
 #reset{width:100%;margin-top:6px;padding:9px;border:none;border-radius:8px;
   background:#3a372f;color:#e9e2cf;font-weight:600;font-size:12.5px;cursor:pointer;}
+.panel-sep{border:none;border-top:1px solid rgba(233,226,207,.14);margin:4px 0 15px;}
+.panel-btn{width:100%;margin:0 0 15px;padding:10px;border:none;border-radius:8px;
+  background:#3a372f;color:#e9e2cf;font-weight:600;font-size:12.5px;cursor:pointer;}
+
+/* Fixed-stick calibration overlay */
+#calib{position:fixed;inset:0;z-index:45;display:none;align-items:center;justify-content:center;
+  background:rgba(20,19,16,.6);color:#f3ecd9;text-align:center;padding:28px;
+  font-size:18px;font-weight:700;line-height:1.5;touch-action:none;}
+#calib.active{display:flex;}
 
 /* ===== Screens (menu / overlays) ===== */
 .screen{position:fixed;inset:0;z-index:30;background:#1a1916;color:#e9e2cf;

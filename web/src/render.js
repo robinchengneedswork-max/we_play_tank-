@@ -1,6 +1,12 @@
 "use strict";
 // render — reads state, draws the board, tanks, shells, particles, sticks. No mutation.
 
+function drawFixedBase(cx,cy,color){
+  ctx.save();ctx.globalAlpha=0.30;
+  ctx.beginPath();ctx.arc(cx,cy,cfg.rad,0,7);ctx.strokeStyle=color;ctx.lineWidth=3;ctx.stroke();
+  ctx.beginPath();ctx.arc(cx,cy,6,0,7);ctx.fillStyle=color;ctx.fill();
+  ctx.restore();
+}
 function drawStick(p,color){
   if(!p)return; const s=stickVec(p);
   ctx.save();
@@ -64,6 +70,14 @@ function render(){
     ctx.fillStyle=getCSS('--slate-top');ctx.fillRect(o.x,o.y,o.w,5);
   }
   drawPreview();
+  // smoke trails (behind everything that moves)
+  for(const s of smoke){
+    const k=s.life/s.max;                       // 1 → 0
+    ctx.globalAlpha=Math.max(0,k*0.4);
+    ctx.fillStyle='#6f6a5c';
+    ctx.beginPath();ctx.arc(s.x,s.y,s.r*(1+(1-k)*1.6),0,7);ctx.fill();
+  }
+  ctx.globalAlpha=1;
   // enemies
   for(const e of enemies){
     ctx.globalAlpha = e.invisible ? 0.22 : 1;   // TODO(M3): true invisibility + muzzle-flash reveal
@@ -78,7 +92,11 @@ function render(){
   // player tank (drawn last, on top)
   drawTank(tank, getCSS('--tank'), getCSS('--tank-dark'));
   ctx.restore();
-  // sticks
+  // sticks — show fixed bases where no thumb is down, then the active sticks
+  if(cfg.fixedStick){
+    if(!activePointer('move')) drawFixedBase(cfg.moveCx*W,cfg.moveCy*H,getCSS('--tank'));
+    if(!activePointer('aim'))  drawFixedBase(cfg.aimCx*W, cfg.aimCy*H, 'rgba(217,72,59,.85)');
+  }
   drawStick(activePointer('move'),getCSS('--tank'));
   drawStick(activePointer('aim'),'rgba(217,72,59,.92)');
   // fire button (pubg)

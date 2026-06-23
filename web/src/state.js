@@ -2,11 +2,12 @@
 // state — world data + layout/spawn setup. No rendering, no input.
 
 const tank={x:0,y:0,r:17,bodyAngle:0,turretAngle:-Math.PI/2,vx:0,vy:0,
-            team:'player',hp:3,maxHp:3,lastFire:0};
+            team:'player',hp:3,maxHp:3,lastFire:0,fireSlowUntil:0};
 let obstacles=[];
 let enemies=[];          // typed enemy tanks (see data/types.js)
 let shells=[];           // {x,y,vx,vy,b,life,team,owner}
-let particles=[];
+let particles=[];        // sparks (muzzle / hit / death bursts)
+let smoke=[];            // shell smoke trails (drawn behind shells)
 let score=0;
 let shake=0;
 
@@ -69,10 +70,10 @@ function nextWave(){ run.level++; updateHud(); spawnWave(); }
 
 // Reset the arena for a fresh start of either mode.
 function resetArena(){
-  shells.length=0; particles.length=0; enemies.length=0;
+  shells.length=0; particles.length=0; smoke.length=0; enemies.length=0;
   tank.x=W*0.16; tank.y=H*0.6; tank.vx=0; tank.vy=0;
   tank.bodyAngle=0; tank.turretAngle=-Math.PI/2; tank.aimTarget=tank.turretAngle;
-  tank.team='player'; tank.lastFire=0; tank.maxHp=run.maxHp; tank.hp=run.maxHp;
+  tank.team='player'; tank.lastFire=0; tank.fireSlowUntil=0; tank.maxHp=run.maxHp; tank.hp=run.maxHp;
   score=0;
   if(gameMode==='sandbox')        spawnSandboxSet();
   else if(gameMode==='roguelike') spawnWave();

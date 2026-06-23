@@ -24,6 +24,12 @@ The repo holds **two separate builds** of the game, plus the feel baseline:
   team-tagged shells, `spawnEnemy`, generic `fire(t,aim)` (player feel unchanged via `?? cfg`
   fallback), and a base `driveEnemy` (track/none aim). `predict` aim, mines, and true invisibility
   are data-ready but TODO (M2/M3). See `ENEMY-TYPES-SPRINT.md`.
+  **Input/feel options** (in the ⚙ panel): floating vs **fixed stick** (centers are player-defined
+  via a 2-tap calibration overlay, stored as W/H fractions), **auto-fire** (push the aim stick past
+  the ring to fire on cooldown), **fire-slow** (firing brakes movement by `fireSlow` px/s for
+  `fireSlowMs`), and shell **smoke trails** (separate `smoke[]`, drawn behind shells). Input prefs
+  (`PREF_KEYS` in config.js: fixedStick/autofire/fireSlow/fireSlowMs/centers) persist to
+  `localStorage` as `tankPrefs`.
 - **`lan/`** — the **LAN multiplayer** build (`lan/server/` + `lan/public/`). Needs Node; Vercel
   can't host the persistent `ws` server, so this runs locally only.
 - **`reference/`** — the feel baseline. Untouched.
