@@ -10,6 +10,21 @@ let lastFire=0;
 let score=0;
 let shake=0;
 
+// Roguelike run state (scaffold — grows with the run system: upgrades, biomes, etc.)
+const run={ level:1, kills:0, hp:3, maxHp:3 };
+function resetRun(){ run.level=1; run.kills=0; run.maxHp=3; run.hp=run.maxHp; }
+
+// Reset the arena for a fresh start of either mode.
+function resetArena(){
+  shells.length=0; particles.length=0;
+  tank.x=W*0.16; tank.y=H*0.6; tank.vx=0; tank.vy=0;
+  tank.bodyAngle=0; tank.turretAngle=-Math.PI/2; tank.aimTarget=tank.turretAngle;
+  score=0;
+  targets.forEach(placeTarget);
+  // TODO(roguelike): spawn wave enemies here instead of static targets (see ENEMY-TYPES-SPRINT T0).
+  // TODO(sandbox): give the test loadout / let the weapon picker populate the arena.
+}
+
 function layoutObstacles(){
   // proportional blocks for bank-shot practice
   obstacles=[

@@ -13,10 +13,15 @@ This file is the source of truth for architecture and decisions. Read it before 
 The repo holds **two separate builds** of the game, plus the feel baseline:
 
 - **`web/`** — the **single-player** build, deployed to **Vercel** (static, no server). Phones (or
-  anyone) load it from the Vercel URL — your tank + targets, twin-stick on one screen. It is a
-  faithful Phase-1 modular extraction of `reference/` into the project module pattern
-  (`web/src/{config,state,input,logic,render,ui,main}.js` + `index.html` + `style.css`). No
+  anyone) load it from the Vercel URL. Module pattern:
+  `web/src/{config,state,input,logic,render,ui,menu,main}.js` + `index.html` + `style.css`. No
   `audio.js` yet — the reference has haptics only, no synthesized sound (known gap vs the LAN host).
+  Has a **menu/screen system** (`menu.js`, `.screen`/`.active` + `showScreen`) with two modes
+  (`gameMode` in config): **Sandbox** (free-play testbed for upcoming weapons/upgrades) and
+  **Roguelike** (`run` state scaffold in `state.js` — level/kills/hp HUD; `resetRun`/`resetArena`).
+  Settings = the same tuning panel, opened from the menu and the in-game gear. **Both modes share
+  today's target-range arena** — there's no enemy AI in `web/` yet (that's the T0 sprint); the run
+  system (waves, upgrade picks, permadeath) is scaffolded with `TODO` hooks, not built.
 - **`lan/`** — the **LAN multiplayer** build (`lan/server/` + `lan/public/`). Needs Node; Vercel
   can't host the persistent `ws` server, so this runs locally only.
 - **`reference/`** — the feel baseline. Untouched.
@@ -25,6 +30,14 @@ The repo holds **two separate builds** of the game, plus the feel baseline:
 `vercel.json` sets `outputDirectory: "web"` (no build step) so Vercel publishes only `web/`.
 `.vercelignore` keeps `lan/`, `reference/`, `node_modules`, docs out of the upload. Vercel is wired
 to the GitHub repo `robinchengneedswork-max/we_play_tank-` (branch `main`) → push = deploy.
+
+### Direction (roguelike pivot)
+The target is shifting toward a **roguelike** (*Nuclear Throne* / *Into the Breach* inspiration):
+short runs, escalating waves, upgrade picks between fights, permadeath. The `web/` single-player is
+the **testbed** for tightening combat/feel; the long-term goal is to bring it **back to couch co-op**.
+Current engine is **realtime twin-stick**, so the scaffolded roguelike leans *Nuclear Throne*
+(realtime) — *Into the Breach* (turn-based grid) would be a different engine; revisit before building
+deep run mechanics. The run/upgrade meta-structure is engine-agnostic and lives ahead of that choice.
 
 ## Current state of the repo
 

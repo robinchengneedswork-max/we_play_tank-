@@ -16,5 +16,6 @@ const FRAME = 18;                 // board inner margin (px)
 
 let W=0, H=0, DPR=1;             // canvas size, set in main.resize()
 let mode='brawl';                 // 'brawl' | 'pubg'  (right-stick fire model)
-let started=false;                // gated by the start overlay
+let gameMode=null;                // null (menu) | 'sandbox' | 'roguelike'
+let started=false;                // true once a mode is running (gates the loop)
 let fireBtn={x:0,y:0,r:38};       // PUBG-mode trigger, positioned in resize()

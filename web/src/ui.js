@@ -29,10 +29,10 @@ binds.forEach(([id,lbl,fmt])=>{const el=document.getElementById(id);
 document.getElementById('reset').onclick=()=>{Object.assign(cfg,DEFAULTS);syncPanel();};
 syncPanel();
 
-// ---- start: fullscreen + landscape lock ----
-document.getElementById('startBtn').onclick=async()=>{
-  try{ await document.documentElement.requestFullscreen(); }catch(e){}
-  try{ await screen.orientation.lock('landscape'); }catch(e){}
-  document.getElementById('start').style.display='none';
-  resize(); started=true; tank.aimTarget=tank.turretAngle;
-};
+// ---- HUD stat pills (sandbox: hits · roguelike: level/kills) ----
+const elHits=document.getElementById('statHits');
+const elRun=document.getElementById('statRun');
+function updateHud(){
+  elHits.textContent='Hits '+score;
+  elRun.textContent='Lv '+run.level+' · '+run.kills+' kills · '+'♥'.repeat(run.hp);
+}

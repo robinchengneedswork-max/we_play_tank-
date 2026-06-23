@@ -82,7 +82,12 @@ function update(dt){
   if(shake>0) shake=Math.max(0,shake-dt*30);
 }
 function hitTarget(tg){
-  score++; document.getElementById('score').textContent='Hits '+score;
+  score++;
+  if(gameMode==='roguelike'){            // run progression scaffold
+    run.kills++;
+    if(run.kills % 10 === 0) run.level++; // TODO: replace with real wave clears / upgrade picks
+  }
+  updateHud();
   for(let i=0;i<14;i++){const sp=80+Math.random()*200,a=Math.random()*Math.PI*2;
     particles.push({x:tg.x,y:tg.y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:0.4,c:'#c0584a'});}
   if(cfg.shake) shake=Math.min(shake+7,11);
