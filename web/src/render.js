@@ -97,6 +97,16 @@ function render(){
     ctx.moveTo(c.x+c.w-3,c.y+3);ctx.lineTo(c.x+3,c.y+c.h-3);ctx.stroke();
     if(c.hp<c.max){ ctx.globalAlpha=(1-c.hp/c.max)*0.5;ctx.fillStyle='#2a1d10';ctx.fillRect(c.x,c.y,c.w,c.h);ctx.globalAlpha=1; }
   }
+  // siege hold zone — the fortress to capture + defend (red=contested, green=holding, amber=stand-in-it)
+  if(holdRect){
+    const held=run.siege&&run.siege.phase==='hold', inz=inHoldZone(tank);
+    const col = !held ? '217,72,59' : (inz ? '95,191,106' : '232,178,74');
+    ctx.save();
+    ctx.fillStyle='rgba('+col+',0.12)'; ctx.fillRect(holdRect.x,holdRect.y,holdRect.w,holdRect.h);
+    ctx.setLineDash([6,5]); ctx.lineWidth=2; ctx.strokeStyle='rgba('+col+',0.8)';
+    ctx.strokeRect(holdRect.x+1,holdRect.y+1,holdRect.w-2,holdRect.h-2);
+    ctx.restore();
+  }
   // pickups — crate drops, pulsing on the floor (heal = green +, upgrade = gold ↑)
   for(const p of pickups){
     const k=Math.min(1,p.life/p.max), a=Math.min(1,k*2), pulse=0.65+0.35*Math.sin(performance.now()/180);
@@ -185,6 +195,15 @@ function render(){
     ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=getCSS('--ink');
     ctx.font='800 26px system-ui';ctx.fillText('WAVE '+run.level, W/2, H/2-18);
     ctx.font='800 44px system-ui';ctx.fillText(Math.max(1,Math.ceil(run.timer/1000)), W/2, H/2+24);
+    ctx.restore();
+  }
+  // siege hold banner: timer (counts only while you're on the point) + a nudge if you've left it
+  if(gameMode==='roguelike' && run.siege && run.siege.phase==='hold' && run.phase==='fighting'){
+    ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillStyle=getCSS('--ink');ctx.font='800 22px system-ui';
+    ctx.fillText('HOLD  '+Math.max(0,Math.ceil(run.siege.timer/1000))+'s', W/2, 38);
+    if(!inHoldZone(tank)){ ctx.fillStyle='rgba(217,72,59,.95)';ctx.font='800 15px system-ui';
+      ctx.fillText('RETURN TO THE POINT', W/2, 62); }
     ctx.restore();
   }
 }

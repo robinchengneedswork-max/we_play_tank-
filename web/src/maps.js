@@ -6,8 +6,10 @@
 // Authoring grid is 16×9 (landscape-first); the outer wall is the engine FRAME,
 // so maps carry no border row.
 
-const TILE = { FLOOR:'.', BLOCK:'#', HOLE:'O', WATER:'W', CRATE:'C', SPAWN:'S', ENEMY:'e' };
+const TILE = { FLOOR:'.', BLOCK:'#', HOLE:'O', WATER:'W', CRATE:'C', SPAWN:'S', ENEMY:'e', HOLD:'H' };
 const CRATE_HP = 2;              // shots a crate takes before it breaks (M3)
+// On SIEGE maps: 'H' marks the hold zone (the fortress you capture + defend);
+// 'e' cells mark the edge(s) reinforcements pour in from (so maps can be linear).
 
 // Map library (M2). Each map: name, spawn style ('warp' default | 'siege'), and a
 // 16×9 ASCII grid. Kept deliberately OPEN — enemies have no pathfinding (see
@@ -102,27 +104,40 @@ const MAPS=[
     "..........##....",
     "................",
   ]},
-  { name:'Siege Keep', spawn:'siege', grid:[
+  // ---- SIEGE (assault→hold): clear the 'H' fortress garrison, then hold the zone
+  // while reinforcements pour in from the 'e' edges. Walls are '#' with 'O' slits. ----
+  { name:'Redoubt', spawn:'siege', grid:[      // linear: fortress center, reinforcements from the right
     "................",
-    "................",
+    "......####...e..",
+    "......#HH#......",
+    "......#HH#...e..",
+    ".S.....HHO......",
+    "......#HH#...e..",
+    "......#HH#......",
     "......####......",
-    "......####......",
-    "..S...####...e..",
-    "......####......",
-    "......####......",
-    "................",
     "................",
   ]},
-  { name:'Siege Open', spawn:'siege', grid:[
+  { name:'Causeway', spawn:'siege', grid:[     // linear: fortress low, reinforcements from the top
+    "................",
+    "......e.e.e.....",
     "................",
     "................",
-    "....OO....OO....",
     "................",
-    "..S..........e..",
+    "......#O#O#.....",
+    "......#HHH#.....",
+    ".S.....HHH......",
     "................",
-    "....OO....OO....",
+  ]},
+  { name:'Crossroads', spawn:'siege', grid:[   // central hold, reinforcements from left AND right
     "................",
-    "................",
+    ".....#....#.....",
+    ".....#....#.....",
+    "..e..O.HH.O..e..",
+    ".....#.HH.#.....",
+    "..e..O.HH.O..e..",
+    ".....#....#.....",
+    ".....#....#.....",
+    ".......S........",
   ]},
   { name:'Crate Yard', spawn:'warp', grid:[
     "................",
@@ -178,13 +193,14 @@ function buildMap(def){
   const holeCells =mergeCellRects(grid, TILE.HOLE);
   const waterCells=mergeCellRects(grid, TILE.WATER);
   const crateCells=mergeCellRects(grid, TILE.CRATE);
+  const holdCells =mergeCellRects(grid, TILE.HOLD);
   let playerCell=null; const enemyCells=[];
   for(let r=0;r<R;r++) for(let c=0;c<C;c++){
     const ch=grid[r][c];
     if(ch===TILE.SPAWN) playerCell={c,r};
     else if(ch===TILE.ENEMY) enemyCells.push({c,r});
   }
-  return { def, C, R, blockCells, holeCells, waterCells, crateCells, playerCell, enemyCells };
+  return { def, C, R, blockCells, holeCells, waterCells, crateCells, holdCells, playerCell, enemyCells };
 }
 
 let currentMap = buildMap(MAPS[0]);
@@ -202,6 +218,13 @@ function projectMap(){
   for(const r of bake(currentMap.waterCells)){ r.water=true; holeRects.push(r); }   // water = hole (move-block) with a wet look
   crates.length=0;
   for(const r of bake(currentMap.crateCells)){ r.crate=true; r.hp=CRATE_HP; r.max=CRATE_HP; crates.push(r); }
+  // hold zone = pixel bounding box of all 'H' cells (siege only; null otherwise)
+  holdRect=null;
+  if(currentMap.holdCells.length){
+    let mnc=1e9,mnr=1e9,mxc=-1e9,mxr=-1e9;
+    for(const b of currentMap.holdCells){ mnc=Math.min(mnc,b.c); mnr=Math.min(mnr,b.r); mxc=Math.max(mxc,b.c+b.w); mxr=Math.max(mxr,b.r+b.h); }
+    holdRect={ x:FRAME+mnc*cw, y:FRAME+mnr*chh, w:(mxc-mnc)*cw, h:(mxr-mnr)*chh };
+  }
 }
 
 // Select a map (for M2 rotation / sandbox cycling) and re-project at current size.

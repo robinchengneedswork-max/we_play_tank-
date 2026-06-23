@@ -7,6 +7,7 @@ let blockRects=[];       // solid obstacle rects (pixel space); baked from the m
 let holeRects=[];        // pits (+ water, tagged): block movement, but shells fly over + LOS clear (M1)
 let crates=[];           // destructible cover {x,y,w,h,hp,max,crate} — bounce+block until broken (M3)
 let pickups=[];          // crate drops {x,y,kind,life,max}: 'heal' / 'upgrade' (M3)
+let holdRect=null;       // siege hold zone (pixel rect) — the fortress to capture + defend (siege rework)
 let enemies=[];          // typed enemy tanks (see data/types.js)
 let shells=[];           // {x,y,vx,vy,b,life,team,owner}
 let particles=[];        // sparks (muzzle / hit / death bursts)
@@ -18,13 +19,16 @@ let shake=0;
 
 // Roguelike run state. `mods` are the player's run upgrades, layered over cfg
 // as multipliers/adders (so cfg stays the live-tunable baseline; sandbox = baseline).
-const run={ level:1, kills:0, hp:3, maxHp:3, phase:'fighting', timer:0, mods:freshMods() };
+const run={ level:1, kills:0, hp:3, maxHp:3, phase:'fighting', timer:0, mods:freshMods(), siege:null };
 function freshMods(){ return {move:1, turret:1, cd:1, shell:1, maxShells:0, bounce:0, fireSlow:1}; }
 function resetRun(){
   run.level=1; run.kills=0; run.maxHp=3; run.hp=run.maxHp;
-  run.phase='fighting'; run.timer=0; run.mods=freshMods();
+  run.phase='fighting'; run.timer=0; run.mods=freshMods(); run.siege=null;
 }
 const INTERMISSION_MS=2600;   // breather + countdown before a wave goes live
+// Siege rework: assault→hold objective. `run.siege` = {phase:'assault'|'hold', timer, max, nextSpawn}.
+const HOLD_MS=22000;          // king-of-the-hill hold duration (ticks only while you're in the zone)
+const REINFORCE_GAP=2600;     // ms between reinforcement spawns during the hold
 
 // Upgrade pool offered between waves. apply() mutates run.mods (or HP).
 const UPGRADES=[
@@ -115,6 +119,31 @@ function placeForWave(e){
   else { const p=enemySpawnPos(); e.x=p.x; e.y=p.y; e.entering=false; }
 }
 
+// Siege garrison: spawn inside the hold zone (the fortress defenders you assault).
+function garrisonSpawnPos(){
+  if(!holdRect) return enemySpawnPos();
+  for(let t=0;t<30;t++){
+    const x=holdRect.x+Math.random()*holdRect.w, y=holdRect.y+Math.random()*holdRect.h;
+    const onT=o=>x>o.x-8&&x<o.x+o.w+8&&y>o.y-8&&y<o.y+o.h+8;
+    if(blockRects.some(onT)||holeRects.some(onT)||crates.some(onT)) continue;
+    return {x,y};
+  }
+  return {x:holdRect.x+holdRect.w/2, y:holdRect.y+holdRect.h/2};
+}
+// Siege reinforcements: enter off-screen from the edge nearest an 'e' hint (so
+// maps stay directional/linear); fall back to a random edge if a map has none.
+function reinforceSpawn(r){
+  const hints=(currentMap&&currentMap.enemyCells)||[];
+  if(!hints.length) return siegeEntryPos(r);
+  const p=cellToPx(hints[(Math.random()*hints.length)|0]), m=r+16;
+  const dL=p.x-FRAME, dR=(W-FRAME)-p.x, dT=p.y-FRAME, dB=(H-FRAME)-p.y;
+  const mn=Math.min(dL,dR,dT,dB);
+  if(mn===dL) return {x:FRAME-m,   y:p.y};
+  if(mn===dR) return {x:W-FRAME+m, y:p.y};
+  if(mn===dT) return {x:p.x, y:FRAME-m};
+  return            {x:p.x, y:H-FRAME+m};
+}
+
 // Sandbox: a respawning range of M1 types to test weapons/feel against.
 function spawnSandboxSet(){
   ['brown','grey','teal','red'].forEach(tp=>{ const e=spawnEnemy(tp,0,0); if(e){ const p=enemySpawnPos(); e.x=p.x; e.y=p.y; } });
@@ -148,7 +177,15 @@ function beginWave(){
   loadNextMap();                 // rotate to a new arena each wave (rebuilds crates at full hp)
   mines.length=0; tracks.length=0; shells.length=0; smoke.length=0; particles.length=0; pickups.length=0;
   resetPlayerToSpawn();          // player to the new map's 'S'
-  waveRoster(run.level).forEach(tp=>{ const e=spawnEnemy(tp,0,0); if(e){ placeForWave(e); e.spawning=true; } });
+  if(currentMap.def.spawn==='siege' && holdRect){
+    // SIEGE: garrison warps into the fortress; you assault, then hold (see updateSiege).
+    run.siege={ phase:'assault', timer:HOLD_MS, max:HOLD_MS, nextSpawn:0 };
+    const roster=waveRoster(run.level), gn=Math.min(roster.length, 3+Math.floor(run.level/2));
+    for(let i=0;i<gn;i++){ const e=spawnEnemy(roster[i],0,0); if(e){ const p=garrisonSpawnPos(); e.x=p.x; e.y=p.y; e.entering=false; e.spawning=true; } }
+  } else {
+    run.siege=null;
+    waveRoster(run.level).forEach(tp=>{ const e=spawnEnemy(tp,0,0); if(e){ placeForWave(e); e.spawning=true; } });
+  }
   run.phase='intermission'; run.timer=INTERMISSION_MS;
   updateHud();
 }
@@ -188,9 +225,13 @@ function restartLevel(){
   projectMap();                  // same map, but rebuild crates to full hp for the retry
   resetPlayerToSpawn();          // same map (retry), so spawn is unchanged
   const now=performance.now();
+  if(run.siege){ run.siege.timer=run.siege.max; run.siege.nextSpawn=0; }   // reset the hold clock on retry
   for(const e of enemies){
-    placeForWave(e); e.vx=0; e.vy=0;            // re-warp / re-enter per the map's style
-    e.spawning=true; e.cloakStart=0; e.lastFire=0;
+    if(run.siege){                              // siege: garrison back in the fortress / reinforcements back to the edges
+      const p = run.siege.phase==='assault' ? garrisonSpawnPos() : reinforceSpawn(e.r);
+      e.x=p.x; e.y=p.y; e.entering = run.siege.phase!=='assault';
+    } else { placeForWave(e); }                 // warp: re-warp / re-enter per the map's style
+    e.vx=0; e.vy=0; e.spawning=true; e.cloakStart=0; e.lastFire=0;
     e.nextFireAt = now + e.fireGap[0] + Math.random()*(e.fireGap[1]-e.fireGap[0]);
     e.nextMineAt = now + 900 + Math.random()*1600;
   }

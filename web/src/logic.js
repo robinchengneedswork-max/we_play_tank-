@@ -337,6 +337,8 @@ function update(dt){
   updateMines(dt);
   // crate pickups (heal / upgrade) — float on the floor until grabbed or they fade
   updatePickups(dt);
+  // siege objective: capture → hold the point while reinforcements pour in
+  updateSiege(dt, now);
   // smoke trails
   for(let i=smoke.length-1;i>=0;i--){const s=smoke[i];s.life-=dt;
     if(s.life<=0){smoke.splice(i,1);continue;} s.x+=s.vx*dt;s.y+=s.vy*dt;s.vx*=0.92;s.vy*=0.92;}
@@ -378,7 +380,12 @@ function killEnemy(e){
   burst(e.x,e.y,e.color,16); SFX.explode();
   if(cfg.shake) shake=Math.min(shake+6,11);
   if(cfg.haptics&&navigator.vibrate) navigator.vibrate([12,28,12]);
-  if(gameMode==='roguelike'){ run.kills++; updateHud(); if(enemies.length===0) offerUpgrade(); }
+  if(gameMode==='roguelike'){ run.kills++; updateHud();
+    if(enemies.length===0){
+      if(run.siege){ if(run.siege.phase==='assault') capturePoint(); }   // fortress cleared → start the hold
+      else offerUpgrade();                                               // warp: clear-all → upgrade
+    }
+  }
   else if(gameMode==='sandbox'){ updateHud(); const p=randSpawnPos(); spawnEnemy(e.type,p.x,p.y); }
 }
 function onPlayerDeath(){
@@ -422,4 +429,32 @@ function updatePickups(dt){
     if(p.life<=0){ pickups.splice(i,1); continue; }
     if(Math.hypot(p.x-tank.x,p.y-tank.y)<tank.r+11){ applyPickup(p); pickups.splice(i,1); }
   }
+}
+
+// ---- siege objective (assault→hold): king-of-the-hill defence of the fortress ----
+function inHoldZone(t){
+  return !!holdRect && t.x>=holdRect.x-6 && t.x<=holdRect.x+holdRect.w+6
+                    && t.y>=holdRect.y-6 && t.y<=holdRect.y+holdRect.h+6;
+}
+function capturePoint(){           // garrison cleared → you've taken the point; start the hold
+  run.siege.phase='hold';
+  run.siege.timer=run.siege.max;
+  run.siege.nextSpawn=performance.now()+1200;
+  SFX.waveStart();
+}
+function spawnReinforcement(){     // one fresh attacker, driving in from an authored edge
+  const roster=waveRoster(run.level);
+  const e=spawnEnemy(roster[(Math.random()*roster.length)|0], 0, 0); if(!e) return;
+  const p=reinforceSpawn(e.r); e.x=p.x; e.y=p.y; e.entering=true; e.spawning=false;
+}
+function completeSiege(){          // held long enough → attackers break off; on to the upgrade
+  enemies.length=0; shells.length=0;
+  offerUpgrade();
+}
+function updateSiege(dt, now){
+  if(!run.siege || run.phase!=='fighting' || run.siege.phase!=='hold') return;
+  if(inHoldZone(tank)) run.siege.timer-=dt*1000;        // KotH: clock only ticks while you hold the point
+  if(run.siege.timer<=0){ completeSiege(); return; }
+  const cap=Math.min(3+Math.floor(run.level/2), 6), alive=enemies.length;
+  if(now>=run.siege.nextSpawn && alive<cap){ spawnReinforcement(); run.siege.nextSpawn=now+REINFORCE_GAP; }
 }
