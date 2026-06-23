@@ -109,7 +109,9 @@ function waveRoster(level){
 // Spawn the current level's wave in "warp-in" state and start the countdown.
 // Between-level cleanup: clear leftover mines and tread marks (lets you re-hunt Whites).
 function beginWave(){
-  mines.length=0; tracks.length=0;
+  // wipe leftovers so nothing from the cleared wave (esp. in-flight shells) carries
+  // into the countdown and hits the frozen player during warp-in.
+  mines.length=0; tracks.length=0; shells.length=0; smoke.length=0; particles.length=0;
   waveRoster(run.level).forEach(tp=>{ const p=randSpawnPos(); const e=spawnEnemy(tp,p.x,p.y); if(e) e.spawning=true; });
   run.phase='intermission'; run.timer=INTERMISSION_MS;
   updateHud();

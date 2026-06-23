@@ -130,8 +130,13 @@ function driveEnemy(e, now){
   } else { e.vx=0; e.vy=0; }
   // aim + fire
   if(e.aim==='none'){
-    // brown: lazy, doesn't track — occasional loose shot
-    if(now>=e.nextFireAt){ fire(e, Math.random()*Math.PI*2); scheduleFire(e,now); }
+    // brown: lazy — turret drifts toward a wandering heading, fires loosely along it
+    if(e.wanderUntil===undefined || now>=e.wanderUntil){
+      e.wanderTarget=Math.random()*Math.PI*2;
+      e.wanderUntil=now+700+Math.random()*1500;
+    }
+    let wd=((e.wanderTarget-e.turretAngle+Math.PI)%(2*Math.PI))-Math.PI; e.turretAngle+=wd*0.04;
+    if(now>=e.nextFireAt){ fire(e, e.turretAngle); scheduleFire(e,now); }
   } else {
     const aimAng=aimFor(e);
     let td=((aimAng-e.turretAngle+Math.PI)%(2*Math.PI))-Math.PI; e.turretAngle+=td*0.07;
