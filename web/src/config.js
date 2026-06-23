@@ -35,3 +35,16 @@ let gameMode=null;                // null (menu) | 'sandbox' | 'roguelike'
 let started=false;                // true once a mode is running (gates the loop)
 let paused=false;                 // freezes the sim (sandbox upgrade overlay)
 let fireBtn={x:0,y:0,r:38};       // PUBG-mode trigger, positioned in resize()
+
+// Player base classes (chosen per run). Layered over cfg + run.mods by the player
+// stat helpers (pMove/pBounce/pMaxShells/pShell). `cfg.move` is the Light speed;
+// moveMul scales from it. turretArc=null is free 360°; a value (rad) is a frontal
+// gun arc (Tank Destroyer) — the hull swings to follow when you aim past it.
+const CLASSES = {
+  light:    { key:'light',    name:'Light',          desc:'Fast · no ricochet · 2 shells',
+              moveMul:1.0,  shellMul:1.0,  bounce:0, maxShells:2, rocket:false, turretArc:null },
+  medium:   { key:'medium',   name:'Medium',         desc:'Balanced · 2 ricochet · 3 shells',
+              moveMul:0.75, shellMul:1.0,  bounce:2, maxShells:3, rocket:false, turretArc:null },
+  destroyer:{ key:'destroyer',name:'Tank Destroyer', desc:'Slow · rocket gun · 2 ricochet · frontal gun',
+              moveMul:0.65, shellMul:1.25, bounce:2, maxShells:2, rocket:true,  turretArc:Math.PI*35/180 },
+};

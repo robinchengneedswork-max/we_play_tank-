@@ -3,12 +3,14 @@
 
 // Player effective stats = cfg baseline × run upgrade mods (mods default to 1/0,
 // so with no upgrades the player is exactly cfg — live tuning + sandbox unchanged).
-function pMove(){   return cfg.move    * run.mods.move; }
-function pTurret(){ return cfg.turret  * run.mods.turret; }
-function pCd(){     return cfg.cd      * run.mods.cd; }
-function pShell(){  return cfg.shell   * run.mods.shell; }
-function pBounce(){ return cfg.bounce  + run.mods.bounce; }
-function pMaxShells(){ return Math.round(cfg.maxshell + run.mods.maxShells); }
+// class layer: moveMul/shellMul scale cfg; bounce/maxShells come from the class
+// (falling back to cfg when no class is set, e.g. sandbox). run.mods stack on top.
+function pMove(){   return cfg.move   * (run.class?run.class.moveMul :1) * run.mods.move; }
+function pTurret(){ return cfg.turret * run.mods.turret; }
+function pCd(){     return cfg.cd     * run.mods.cd; }
+function pShell(){  return cfg.shell  * (run.class?run.class.shellMul:1) * run.mods.shell; }
+function pBounce(){ return (run.class?run.class.bounce   :cfg.bounce)   + run.mods.bounce; }
+function pMaxShells(){ return Math.round((run.class?run.class.maxShells:cfg.maxshell) + run.mods.maxShells); }
 
 // Generic fire: any tank shoots along `aim`. Enemies read their per-tank stats;
 // the player reads cfg×mods. tryFire() is the player's wrapper.
@@ -311,9 +313,24 @@ function update(dt){
       // auto-fire: hold the aim stick past the ring to keep firing on cooldown
       if(cfg.autofire){ const ap=activePointer('aim'); if(ap && stickVec(ap).raw>cfg.rad) tryFire(); }
     }
-    // turret easing toward aim target (allowed during warm-up so you can pre-aim)
+    // turret aim — Tank Destroyer's gun is limited to a frontal arc; when you aim
+    // past it, the hull swings to follow (unless you're actively driving).
     if(tank.aimTarget!==undefined){
-      let d=((tank.aimTarget-tank.turretAngle+Math.PI)%(2*Math.PI))-Math.PI;
+      const arc = run.class && run.class.turretArc;
+      let aim = tank.aimTarget;
+      if(arc){
+        let rel=((aim-tank.bodyAngle+Math.PI)%(2*Math.PI))-Math.PI;
+        if(Math.abs(rel)>arc){
+          const steering = !inWarmup && !!activePointer('move');
+          if(!steering){                                  // swing the hull toward the target
+            tank.bodyAngle += Math.sign(rel)*Math.min(Math.abs(rel)-arc, 1.8*dt);
+            rel=((aim-tank.bodyAngle+Math.PI)%(2*Math.PI))-Math.PI;
+          }
+          rel=Math.max(-arc,Math.min(arc,rel));           // clamp the gun to the arc
+          aim=tank.bodyAngle+rel;
+        }
+      }
+      let d=((aim-tank.turretAngle+Math.PI)%(2*Math.PI))-Math.PI;
       tank.turretAngle+=d*pTurret();
     }
   }

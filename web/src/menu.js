@@ -16,7 +16,8 @@ function setHudForMode(){
   document.getElementById('sbMapBtn').hidden    = (gameMode!=='sandbox');
 }
 
-async function startMode(m){
+let runClassKey=null;       // remembered so game-over Retry keeps the chosen class
+async function startMode(m, classKey){
   gameMode=m; paused=false;
   // Fullscreen + landscape lock on the user gesture (best-effort; ignored on desktop).
   try{ await document.documentElement.requestFullscreen(); }catch(e){}
@@ -25,6 +26,9 @@ async function startMode(m){
   hud.classList.remove('hud-hidden');
   resize();                 // size canvas + bake the map's collision rects for current orientation
   resetRun();               // reset run state + upgrade mods (both modes start at baseline)
+  runClassKey = (m==='roguelike') ? (classKey||runClassKey||'medium') : null;
+  run.class = runClassKey ? CLASSES[runClassKey] : null;     // sandbox: null = cfg baseline
+  tank.rocket = !!(run.class && run.class.rocket);
   resetArena();
   setHudForMode();
   updateHud();
@@ -39,6 +43,10 @@ function toMenu(){
 }
 
 document.getElementById('btnSandbox').onclick   = ()=>startMode('sandbox');
-document.getElementById('btnRoguelike').onclick = ()=>startMode('roguelike');
+document.getElementById('btnRoguelike').onclick = ()=>showScreen('screen-class');   // choose a class first
 document.getElementById('btnSettings').onclick  = ()=>panel.classList.add('open');
+document.getElementById('classBack').onclick    = ()=>showScreen('screen-menu');
+document.querySelectorAll('#screen-class [data-class]').forEach(b=>{
+  b.onclick = ()=>startMode('roguelike', b.dataset.class);
+});
 document.getElementById('menuBtn').onclick      = toMenu;

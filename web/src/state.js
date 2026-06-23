@@ -19,12 +19,13 @@ let shake=0;
 
 // Roguelike run state. `mods` are the player's run upgrades, layered over cfg
 // as multipliers/adders (so cfg stays the live-tunable baseline; sandbox = baseline).
-const run={ level:1, kills:0, hp:3, maxHp:3, phase:'fighting', timer:0, mods:freshMods(), siege:null, scrap:0, upgradesTaken:0 };
+const run={ level:1, kills:0, hp:3, maxHp:3, phase:'fighting', timer:0, mods:freshMods(), siege:null, scrap:0, upgradesTaken:0, class:null };
 function freshMods(){ return {move:1, turret:1, cd:1, shell:1, maxShells:0, bounce:0, fireSlow:1}; }
 function resetRun(){
   run.level=1; run.kills=0; run.maxHp=3; run.hp=run.maxHp;
   run.phase='fighting'; run.timer=0; run.mods=freshMods(); run.siege=null;
   run.scrap=0; run.upgradesTaken=0;
+  // run.class is set by startMode after resetRun (sandbox leaves it null = cfg baseline)
 }
 const INTERMISSION_MS=2600;   // breather + countdown before a wave goes live
 // Siege rework: assault→hold objective. `run.siege` = {phase:'assault'|'hold', timer, max, nextSpawn}.

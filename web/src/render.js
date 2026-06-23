@@ -19,9 +19,10 @@ function drawStick(p,color){
 }
 function drawPreview(){
   if(!cfg.preview)return; const ap=activePointer('aim'); if(!ap)return;
-  let g={x:tank.x+Math.cos(tank.aimTarget)*(tank.r+10),
-         y:tank.y+Math.sin(tank.aimTarget)*(tank.r+10),
-         vx:Math.cos(tank.aimTarget)*cfg.shell, vy:Math.sin(tank.aimTarget)*cfg.shell,b:cfg.bounce};
+  const aimA=tank.turretAngle, sp=pShell();    // real gun direction (respects the TD arc) + class shell speed
+  let g={x:tank.x+Math.cos(aimA)*(tank.r+10),
+         y:tank.y+Math.sin(aimA)*(tank.r+10),
+         vx:Math.cos(aimA)*sp, vy:Math.sin(aimA)*sp, b:pBounce()};
   ctx.save();ctx.setLineDash([3,7]);ctx.lineWidth=2.5;ctx.strokeStyle='rgba(44,42,38,.45)';
   ctx.beginPath();ctx.moveTo(g.x,g.y);
   const sdt=1/240;
