@@ -51,18 +51,44 @@ function scheduleFire(e,now){ e.nextFireAt = now + e.fireGap[0] + Math.random()*
 function segBlocked(x0,y0,x1,y1){
   const n=20;
   for(let i=1;i<n;i++){ const t=i/n, x=x0+(x1-x0)*t, y=y0+(y1-y0)*t;
-    for(const o of obstacles) if(x>o.x&&x<o.x+o.w&&y>o.y&&y<o.y+o.h) return true; }
+    for(const o of blockRects) if(x>o.x&&x<o.x+o.w&&y>o.y&&y<o.y+o.h) return true; }
   return false;
 }
-// approximate 1-bounce bank shot: mirror the target across each wall, aim at the
-// bounce point if both legs are clear. Returns an angle or null. (2-cushion is out of scope.)
+// approximate 1-bounce bank shot: reflect the target across each candidate
+// surface, aim at the crossing point if it lies on that surface's span and both
+// legs are clear. Surfaces = the arena frame AND every block edge (shells bounce
+// off blocks too, not just the walls). Holes are NOT surfaces (M1) — bankAim only
+// ever reads blockRects. Returns an angle or null. (2-cushion is out of scope.)
+function bankSurfaces(){
+  // each surface: axis ('x' vertical / 'y' horizontal), position v, facing side s
+  // (shooter must satisfy (e[axis]-v)*s >= 0), and the [lo,hi] span on the other axis.
+  const surf=[
+    {axis:'x',v:FRAME,    s: 1,lo:FRAME,hi:H-FRAME},
+    {axis:'x',v:W-FRAME,  s:-1,lo:FRAME,hi:H-FRAME},
+    {axis:'y',v:FRAME,    s: 1,lo:FRAME,hi:W-FRAME},
+    {axis:'y',v:H-FRAME,  s:-1,lo:FRAME,hi:W-FRAME},
+  ];
+  for(const o of blockRects){
+    surf.push({axis:'x',v:o.x,     s:-1,lo:o.y,hi:o.y+o.h});   // left face
+    surf.push({axis:'x',v:o.x+o.w, s: 1,lo:o.y,hi:o.y+o.h});   // right face
+    surf.push({axis:'y',v:o.y,     s:-1,lo:o.x,hi:o.x+o.w});   // top face
+    surf.push({axis:'y',v:o.y+o.h, s: 1,lo:o.x,hi:o.x+o.w});   // bottom face
+  }
+  return surf;
+}
 function bankAim(e,tx,ty){
-  const walls=[['x',FRAME],['x',W-FRAME],['y',FRAME],['y',H-FRAME]];
-  for(const [axis,v] of walls){
-    let mx=tx,my=ty; if(axis==='x') mx=2*v-tx; else my=2*v-ty;
+  for(const {axis,v,s,lo,hi} of bankSurfaces()){
     let bx,by;
-    if(axis==='x'){ const tt=(v-e.x)/((mx-e.x)||1e-6); if(tt<=0||tt>=1) continue; bx=v; by=e.y+(my-e.y)*tt; }
-    else          { const tt=(v-e.y)/((my-e.y)||1e-6); if(tt<=0||tt>=1) continue; by=v; bx=e.x+(mx-e.x)*tt; }
+    if(axis==='x'){
+      if((e.x-v)*s<0) continue;                                // must face the surface
+      const mx=2*v-tx, tt=(v-e.x)/((mx-e.x)||1e-6); if(tt<=0||tt>=1) continue;
+      bx=v; by=e.y+(ty-e.y)*tt;
+    } else {
+      if((e.y-v)*s<0) continue;
+      const my=2*v-ty, tt=(v-e.y)/((my-e.y)||1e-6); if(tt<=0||tt>=1) continue;
+      by=v; bx=e.x+(tx-e.x)*tt;
+    }
+    if((axis==='x'?by:bx)<lo || (axis==='x'?by:bx)>hi) continue;  // crossing on the surface span?
     if(bx<FRAME-1||bx>W-FRAME+1||by<FRAME-1||by>H-FRAME+1) continue;
     if(segBlocked(e.x,e.y,bx,by)||segBlocked(bx,by,tx,ty)) continue;
     return Math.atan2(by-e.y, bx-e.x);
@@ -77,8 +103,14 @@ function aimFor(e){
   if(e.aim==='track') return Math.atan2(tank.y-e.y, tank.x-e.x);
   const speed=e.shellSpeed||cfg.shell;
   const lead = e.aim==='cutoff' ? 0.5 : 1;          // cutoff leads only halfway
+  // intercept point, folded back inside the walls each step — the player clamps/
+  // slides along the frame, so a lead that runs past a wall would just miss.
   let tx=tank.x,ty=tank.y;
-  for(let k=0;k<2;k++){ const d=Math.hypot(tx-e.x,ty-e.y), t=d/speed*lead; tx=tank.x+tank.vx*t; ty=tank.y+tank.vy*t; }
+  for(let k=0;k<2;k++){
+    const d=Math.hypot(tx-e.x,ty-e.y), t=d/speed*lead;
+    tx=Math.max(FRAME+tank.r,Math.min(W-FRAME-tank.r,tank.x+tank.vx*t));
+    ty=Math.max(FRAME+tank.r,Math.min(H-FRAME-tank.r,tank.y+tank.vy*t));
+  }
   if(e.aim==='cutoff') return Math.atan2(ty-e.y, tx-e.x);   // rushers don't bother banking
   if(!segBlocked(e.x,e.y,tx,ty)) return Math.atan2(ty-e.y, tx-e.x);
   const bank=bankAim(e,tx,ty);
@@ -112,16 +144,22 @@ function driveEnemy(e, now){
     e.nextMineAt = now + 1400 + Math.random()*2200;
   }
 }
+// Push a circular tank out of any rect it overlaps. Blocks AND holes both stop
+// movement (you can't drive into a pit), so both lists are tested here. Shells +
+// LOS deliberately do NOT use this — they read blockRects only (holes are see/fire-through).
+function pushOutTerrain(t){
+  for(const rects of [blockRects, holeRects]) for(const o of rects){
+    const cx=Math.max(o.x,Math.min(t.x,o.x+o.w));
+    const cy=Math.max(o.y,Math.min(t.y,o.y+o.h));
+    const dx=t.x-cx, dy=t.y-cy, d=Math.hypot(dx,dy);
+    if(d<t.r){ const nx=dx/(d||1),ny=dy/(d||1); t.x=cx+nx*t.r; t.y=cy+ny*t.r; }
+  }
+}
 function moveEnemy(e,dt){
   e.x+=e.vx*dt; e.y+=e.vy*dt;
   e.x=Math.max(FRAME+e.r,Math.min(W-FRAME-e.r,e.x));
   e.y=Math.max(FRAME+e.r,Math.min(H-FRAME-e.r,e.y));
-  for(const o of obstacles){
-    const cx=Math.max(o.x,Math.min(e.x,o.x+o.w));
-    const cy=Math.max(o.y,Math.min(e.y,o.y+o.h));
-    const dx=e.x-cx, dy=e.y-cy, d=Math.hypot(dx,dy);
-    if(d<e.r){ const nx=dx/(d||1),ny=dy/(d||1); e.x=cx+nx*e.r; e.y=cy+ny*e.r; }
-  }
+  pushOutTerrain(e);
 }
 
 // ---- tread marks: dropped while moving; fade out; cleared between levels ----
@@ -157,12 +195,12 @@ function detonate(m){
 
 // ---- physics ----
 function reflectStep(o,nx,ny,dt){
-  // step a moving point, reflecting off frame + obstacles. returns {x,y,vx,vy,hit}
+  // step a moving point, reflecting off frame + blocks. returns {x,y,vx,vy,hit}
   let x=o.x,y=o.y,vx=o.vx,vy=o.vy,hit=false;
   let px=x+vx*dt, py=y+vy*dt;
   if(px<FRAME){px=FRAME;vx=-vx;hit=true;} else if(px>W-FRAME){px=W-FRAME;vx=-vx;hit=true;}
   if(py<FRAME){py=FRAME;vy=-vy;hit=true;} else if(py>H-FRAME){py=H-FRAME;vy=-vy;hit=true;}
-  for(const ob of obstacles){
+  for(const ob of blockRects){
     if(px>ob.x&&px<ob.x+ob.w&&py>ob.y&&py<ob.y+ob.h){
       // resolve on the axis we entered from
       const fromLeft=x<=ob.x, fromRight=x>=ob.x+ob.w;
@@ -183,34 +221,35 @@ function update(dt){
   const playerDead = gameMode==='roguelike' && run.phase==='dead';
   // ---- player movement (skipped once dead — the wreck just sits while it explodes) ----
   if(!playerDead){
-    // recoil brake: speed drops for a moment after firing
-    const baseMove = pMove();
-    const moveSpeed = now<tank.fireSlowUntil ? Math.max(20, baseMove-cfg.fireSlow*run.mods.fireSlow) : baseMove;
-    const mp=activePointer('move');
-    if(mp){ const s=stickVec(mp); const n=s.mag/cfg.rad;
-      tank.vx=Math.cos(s.ang)*moveSpeed*n; tank.vy=Math.sin(s.ang)*moveSpeed*n;
-      const target=s.ang; let d=((target-tank.bodyAngle+Math.PI)%(2*Math.PI))-Math.PI;
-      tank.bodyAngle+=d*cfg.body;
-    } else { tank.vx*=0.8; tank.vy*=0.8; }
-    tank.x+=tank.vx*dt; tank.y+=tank.vy*dt;
-    // tank vs frame
-    tank.x=Math.max(FRAME+tank.r,Math.min(W-FRAME-tank.r,tank.x));
-    tank.y=Math.max(FRAME+tank.r,Math.min(H-FRAME-tank.r,tank.y));
-    // tank vs obstacles (push out)
-    for(const o of obstacles){
-      const cx=Math.max(o.x,Math.min(tank.x,o.x+o.w));
-      const cy=Math.max(o.y,Math.min(tank.y,o.y+o.h));
-      const dx=tank.x-cx, dy=tank.y-cy, d=Math.hypot(dx,dy);
-      if(d<tank.r){ const nx=dx/(d||1),ny=dy/(d||1); tank.x=cx+nx*tank.r; tank.y=cy+ny*tank.r; }
+    // frozen during the warp-in countdown — the player can't move before the wave goes live
+    const inWarmup = gameMode==='roguelike' && run.phase==='intermission';
+    if(inWarmup){
+      tank.vx=0; tank.vy=0;
+    } else {
+      // recoil brake: speed drops for a moment after firing
+      const baseMove = pMove();
+      const moveSpeed = now<tank.fireSlowUntil ? Math.max(20, baseMove-cfg.fireSlow*run.mods.fireSlow) : baseMove;
+      const mp=activePointer('move');
+      if(mp){ const s=stickVec(mp); const n=s.mag/cfg.rad;
+        tank.vx=Math.cos(s.ang)*moveSpeed*n; tank.vy=Math.sin(s.ang)*moveSpeed*n;
+        const target=s.ang; let d=((target-tank.bodyAngle+Math.PI)%(2*Math.PI))-Math.PI;
+        tank.bodyAngle+=d*cfg.body;
+      } else { tank.vx*=0.8; tank.vy*=0.8; }
+      tank.x+=tank.vx*dt; tank.y+=tank.vy*dt;
+      // tank vs frame
+      tank.x=Math.max(FRAME+tank.r,Math.min(W-FRAME-tank.r,tank.x));
+      tank.y=Math.max(FRAME+tank.r,Math.min(H-FRAME-tank.r,tank.y));
+      // tank vs terrain (blocks + holes both block movement)
+      pushOutTerrain(tank);
+      trailTank(tank,dt);
+      // auto-fire: hold the aim stick past the ring to keep firing on cooldown
+      if(cfg.autofire){ const ap=activePointer('aim'); if(ap && stickVec(ap).raw>cfg.rad) tryFire(); }
     }
-    // turret easing toward aim target
+    // turret easing toward aim target (allowed during warm-up so you can pre-aim)
     if(tank.aimTarget!==undefined){
       let d=((tank.aimTarget-tank.turretAngle+Math.PI)%(2*Math.PI))-Math.PI;
       tank.turretAngle+=d*pTurret();
     }
-    trailTank(tank,dt);
-    // auto-fire: hold the aim stick past the ring to keep firing on cooldown
-    if(cfg.autofire){ const ap=activePointer('aim'); if(ap && stickVec(ap).raw>cfg.rad) tryFire(); }
   }
   // ---- wave intermission (breather + countdown while enemies warp in) ----
   if(gameMode==='roguelike' && run.phase==='intermission'){
@@ -261,14 +300,15 @@ function burst(x,y,color,n){
 }
 function damageTank(t, dmg){
   if(t.team==='player'){
-    if(gameMode==='roguelike' && run.phase==='dead') return;   // already gone
-    burst(t.x,t.y,'#ffffff',12);
-    if(cfg.shake) shake=Math.min(shake+8,12);
-    if(cfg.haptics&&navigator.vibrate) navigator.vibrate([18,40,18]);
-    if(gameMode==='roguelike'){           // sandbox player is immortal (feedback only)
-      t.hp-=dmg; run.hp=Math.max(0,t.hp); updateHud();
-      if(t.hp<=0) onPlayerDeath(); else SFX.hit();
-    } else SFX.hit();
+    if(gameMode==='roguelike'){
+      if(run.phase==='dead') return;      // already gone
+      onPlayerDeath();                     // any hit is lethal → lose a life, retry the wave
+    } else {                               // sandbox player is immortal (feedback only)
+      burst(t.x,t.y,'#ffffff',12);
+      if(cfg.shake) shake=Math.min(shake+8,12);
+      if(cfg.haptics&&navigator.vibrate) navigator.vibrate([18,40,18]);
+      SFX.hit();
+    }
   } else {
     t.hp-=dmg;
     burst(t.x,t.y,t.color,10);
@@ -289,9 +329,12 @@ function killEnemy(e){
 function onPlayerDeath(){
   if(run.phase==='dead') return;
   run.phase='dead';
+  run.hp=Math.max(0,run.hp-1); tank.hp=run.hp; updateHud();   // spend a life
   burst(tank.x,tank.y,'#ffffff',20); burst(tank.x,tank.y,'#e8a23a',20);
   if(cfg.shake) shake=18;
   if(cfg.haptics&&navigator.vibrate) navigator.vibrate([40,60,120]);
   SFX.death();
-  setTimeout(showGameOver, 750);   // let the wreck explode, then the summary screen
+  // out of lives → run summary; otherwise retry the wave (killed tanks stay dead)
+  if(run.hp<=0) setTimeout(showGameOver, 750);
+  else          setTimeout(restartLevel, 900);
 }

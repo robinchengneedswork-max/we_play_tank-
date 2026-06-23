@@ -1,0 +1,78 @@
+"use strict";
+// maps — tile-based arena definitions + collision-rect baking.
+// A map is authored as an ASCII tilemap (array of equal-length strings, one char
+// per cell). The grid exists only to author + collide; it is never drawn.
+// Legend: '.' floor · '#' block · 'O' hole (M1) · 'S' player spawn · 'e' enemy zone.
+// Authoring grid is 16×9 (landscape-first); the outer wall is the engine FRAME,
+// so maps carry no border row.
+
+const TILE = { FLOOR:'.', BLOCK:'#', HOLE:'O', SPAWN:'S', ENEMY:'e' };
+
+// Map library. Classic = the bank-shot arena (M0) plus a couple of holes (M1):
+// holes block movement but shells fly over them and AI can see/shoot across.
+const MAPS=[
+  { name:'Classic', spawn:'warp', grid:[
+    "................",
+    ".......##...OO..",
+    ".......##...OO..",
+    ".....##.........",
+    ".....##....OO...",
+    "..S.......##....",
+    "..OO......##....",
+    "......e......e..",
+    "................",
+  ]},
+];
+
+// Greedy-merge all cells of char `ch` into the fewest axis-aligned rectangles
+// (in CELL space). Merging avoids the per-cell collision seams that would snag
+// tanks and shells on tile borders.
+function mergeCellRects(grid, ch){
+  const R=grid.length, C=grid[0].length;
+  const used=Array.from({length:R},()=>new Array(C).fill(false));
+  const free=(c,r)=> grid[r][c]===ch && !used[r][c];
+  const rects=[];
+  for(let r=0;r<R;r++) for(let c=0;c<C;c++){
+    if(grid[r][c]!==ch || used[r][c]) continue;
+    let w=1; while(c+w<C && free(c+w,r)) w++;          // extend right
+    let h=1;                                            // extend down while the full strip is free
+    grow: while(r+h<R){
+      for(let k=0;k<w;k++) if(!free(c+k,r+h)) break grow;
+      h++;
+    }
+    for(let rr=r;rr<r+h;rr++) for(let cc=c;cc<c+w;cc++) used[rr][cc]=true;
+    rects.push({c,r,w,h});
+  }
+  return rects;
+}
+
+// Parse a map def → cell-space collision rects + spawn cells. Resolution-
+// independent; projectMap() turns the cell rects into pixel blockRects on resize.
+function buildMap(def){
+  const grid=def.grid, C=grid[0].length, R=grid.length;
+  const blockCells=mergeCellRects(grid, TILE.BLOCK);
+  const holeCells =mergeCellRects(grid, TILE.HOLE);
+  let playerCell=null; const enemyCells=[];
+  for(let r=0;r<R;r++) for(let c=0;c<C;c++){
+    const ch=grid[r][c];
+    if(ch===TILE.SPAWN) playerCell={c,r};
+    else if(ch===TILE.ENEMY) enemyCells.push({c,r});
+  }
+  return { def, C, R, blockCells, holeCells, playerCell, enemyCells };
+}
+
+let currentMap = buildMap(MAPS[0]);
+
+// Project the current map's cell rects onto the playfield (FRAME-inset) at the
+// live canvas size. Called from resize() — cells stretch to fit any screen, so
+// authored layouts stay consistent across phone and laptop.
+function projectMap(){
+  if(!currentMap || !W || !H) return;
+  const cw=(W-2*FRAME)/currentMap.C, chh=(H-2*FRAME)/currentMap.R;
+  const bake=cells=>cells.map(b=>({ x:FRAME+b.c*cw, y:FRAME+b.r*chh, w:b.w*cw, h:b.h*chh }));
+  blockRects.length=0; for(const r of bake(currentMap.blockCells)) blockRects.push(r);
+  holeRects.length=0;  for(const r of bake(currentMap.holeCells))  holeRects.push(r);
+}
+
+// Select a map (for M2 rotation / sandbox cycling) and re-project at current size.
+function loadMap(def){ currentMap=buildMap(def); projectMap(); }

@@ -7,8 +7,13 @@ document.getElementById('closePanel').onclick=()=>panel.classList.remove('open')
 document.getElementById('modeBtn').onclick=()=>{
   mode=mode==='brawl'?'pubg':'brawl';
   const b=document.getElementById('modeBtn');
-  b.innerHTML = mode==='brawl' ? 'Mode: Brawl<small>release stick to fire</small>'
-                               : 'Mode: PUBG<small>aim + index-finger trigger</small>';
+  b.innerHTML = mode==='brawl' ? 'Fire model: Brawl<small>release stick to fire</small>'
+                               : 'Fire model: PUBG<small>aim + index-finger trigger</small>';
+};
+
+// Force reload — cache-busts so the latest Vercel deploy is fetched, not a stale copy.
+document.getElementById('forceReload').onclick=()=>{
+  location.href = location.origin + location.pathname + '?v=' + Date.now();
 };
 
 const binds=[['move','vMove',v=>v],['turret','vTurret',v=>(+v).toFixed(2)],

@@ -22,7 +22,7 @@ async function startMode(m){
   try{ await screen.orientation.lock('landscape'); }catch(e){}
   showScreen(null);
   hud.classList.remove('hud-hidden');
-  resize();                 // size canvas + lay out obstacles for current orientation
+  resize();                 // size canvas + bake the map's collision rects for current orientation
   resetRun();               // reset run state + upgrade mods (both modes start at baseline)
   resetArena();
   setHudForMode();

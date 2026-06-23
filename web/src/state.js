@@ -3,7 +3,8 @@
 
 const tank={x:0,y:0,r:17,bodyAngle:0,turretAngle:-Math.PI/2,vx:0,vy:0,
             team:'player',hp:3,maxHp:3,lastFire:0,fireSlowUntil:0};
-let obstacles=[];
+let blockRects=[];       // solid obstacle rects (pixel space); baked from the map by projectMap()
+let holeRects=[];        // pits: block movement, but shells fly over + LOS is clear (M1)
 let enemies=[];          // typed enemy tanks (see data/types.js)
 let shells=[];           // {x,y,vx,vy,b,life,team,owner}
 let particles=[];        // sparks (muzzle / hit / death bursts)
@@ -72,7 +73,8 @@ function randSpawnPos(){
     const x=FRAME+30+Math.random()*(W-2*FRAME-60);
     const y=FRAME+30+Math.random()*(H-2*FRAME-60);
     if(Math.hypot(x-tank.x,y-tank.y)<200) continue;
-    if(obstacles.some(o=>x>o.x-24&&x<o.x+o.w+24&&y>o.y-24&&y<o.y+o.h+24)) continue;
+    const onTerrain=o=>x>o.x-24&&x<o.x+o.w+24&&y>o.y-24&&y<o.y+o.h+24;
+    if(blockRects.some(onTerrain) || holeRects.some(onTerrain)) continue;
     return {x,y};
   }
   return {x:W/2,y:H/2};
@@ -114,23 +116,37 @@ function beginWave(){
 }
 function nextWave(){ run.level++; beginWave(); }
 
+// Put the player tank back at its spawn, stationary and re-aimed up.
+function resetPlayerToSpawn(){
+  tank.x=W*0.16; tank.y=H*0.6; tank.vx=0; tank.vy=0;
+  tank.bodyAngle=0; tank.turretAngle=-Math.PI/2; tank.aimTarget=tank.turretAngle;
+  tank.lastFire=0; tank.fireSlowUntil=0;
+}
+
 // Reset the arena for a fresh start of either mode.
 function resetArena(){
   shells.length=0; particles.length=0; smoke.length=0; mines.length=0; tracks.length=0; enemies.length=0;
-  tank.x=W*0.16; tank.y=H*0.6; tank.vx=0; tank.vy=0;
-  tank.bodyAngle=0; tank.turretAngle=-Math.PI/2; tank.aimTarget=tank.turretAngle;
-  tank.team='player'; tank.lastFire=0; tank.fireSlowUntil=0; tank.maxHp=run.maxHp; tank.hp=run.maxHp;
+  resetPlayerToSpawn();
+  tank.team='player'; tank.maxHp=run.maxHp; tank.hp=run.maxHp;
   score=0;
   if(gameMode==='sandbox')        spawnSandboxSet();
   else if(gameMode==='roguelike') beginWave();
 }
 
-function layoutObstacles(){
-  // proportional blocks for bank-shot practice
-  obstacles=[
-    {x:W*0.30,y:H*0.28,w:W*0.10,h:H*0.20},
-    {x:W*0.60,y:H*0.52,w:W*0.12,h:H*0.18},
-    {x:W*0.46,y:H*0.12,w:W*0.08,h:H*0.14},
-  ];
-  if(!tank.x){ tank.x=W*0.16; tank.y=H*0.6; }
+// Death with lives left: respawn the player and clear projectiles, but keep the
+// SURVIVING enemies (the tanks you already killed stay dead). Re-warps the
+// survivors at fresh spots and re-enters the intermission breather (frozen start).
+function restartLevel(){
+  if(!(gameMode==='roguelike' && run.phase==='dead')) return;   // guard the delayed call
+  shells.length=0; mines.length=0; smoke.length=0; particles.length=0; tracks.length=0;
+  resetPlayerToSpawn();
+  const now=performance.now();
+  for(const e of enemies){
+    const p=randSpawnPos(); e.x=p.x; e.y=p.y; e.vx=0; e.vy=0;
+    e.spawning=true; e.cloakStart=0; e.lastFire=0;
+    e.nextFireAt = now + e.fireGap[0] + Math.random()*(e.fireGap[1]-e.fireGap[0]);
+    e.nextMineAt = now + 900 + Math.random()*1600;
+  }
+  run.phase='intermission'; run.timer=INTERMISSION_MS;
+  updateHud();
 }

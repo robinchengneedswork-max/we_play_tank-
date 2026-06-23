@@ -55,12 +55,8 @@ function drawTank(t,col,colDark){
 function render(){
   ctx.save();
   if(shake>0) ctx.translate((Math.random()-0.5)*shake,(Math.random()-0.5)*shake);
-  // board
+  // board (no grid lines — the tile grid is an authoring aid only, never drawn)
   ctx.fillStyle=getCSS('--board');ctx.fillRect(0,0,W,H);
-  ctx.strokeStyle=getCSS('--grid');ctx.lineWidth=1;
-  const g=34;
-  for(let x=FRAME;x<=W-FRAME;x+=g){ctx.beginPath();ctx.moveTo(x,FRAME);ctx.lineTo(x,H-FRAME);ctx.stroke();}
-  for(let y=FRAME;y<=H-FRAME;y+=g){ctx.beginPath();ctx.moveTo(FRAME,y);ctx.lineTo(W-FRAME,y);ctx.stroke();}
   // frame
   ctx.strokeStyle=getCSS('--frame');ctx.lineWidth=6;
   ctx.strokeRect(FRAME-3,FRAME-3,W-2*FRAME+6,H-2*FRAME+6);
@@ -73,8 +69,15 @@ function render(){
     ctx.restore();
   }
   ctx.globalAlpha=1;
-  // obstacles
-  for(const o of obstacles){
+  // holes — sunken pits (drive-blocked, but shells & sightlines pass over).
+  // Top lip is the darkest band so they read as recessed (opposite of a raised block).
+  for(const o of holeRects){
+    ctx.fillStyle=getCSS('--hole-rim');  ctx.fillRect(o.x,o.y,o.w,o.h);
+    ctx.fillStyle=getCSS('--hole');      ctx.fillRect(o.x+2,o.y+2,o.w-4,o.h-4);
+    ctx.fillStyle=getCSS('--hole-floor');ctx.fillRect(o.x+2,o.y+6,o.w-4,o.h-8);
+  }
+  // blocks — raised slabs (lighter top lip)
+  for(const o of blockRects){
     ctx.fillStyle=getCSS('--slate');ctx.fillRect(o.x,o.y,o.w,o.h);
     ctx.fillStyle=getCSS('--slate-top');ctx.fillRect(o.x,o.y,o.w,5);
   }
