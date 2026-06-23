@@ -191,6 +191,29 @@ function steerDir(e,want){
   for(const o of offs) if(pathClear(e.x,e.y,want+o,L,pad)){ e.steerSide=o>=0?1:-1; return want+o; }
   return want;
 }
+// Tanks can't stack: push every overlapping pair (player + active enemies) apart.
+// Run after movement; a couple of passes settles clusters. Then re-resolve terrain.
+function resolveTankCollisions(){
+  const tanks=[];
+  if(!(gameMode==='roguelike' && run.phase==='dead')) tanks.push(tank);
+  for(const e of enemies) if(!e.spawning) tanks.push(e);
+  for(let it=0; it<2; it++){
+    for(let i=0;i<tanks.length;i++) for(let j=i+1;j<tanks.length;j++){
+      const a=tanks[i], b=tanks[j]; let dx=b.x-a.x, dy=b.y-a.y, d=Math.hypot(dx,dy); const min=a.r+b.r;
+      if(d<min){
+        if(d<0.001){ dx=Math.random()-0.5; dy=Math.random()-0.5; d=Math.hypot(dx,dy)||1; }
+        const push=(min-d)/2, nx=dx/d, ny=dy/d;
+        a.x-=nx*push; a.y-=ny*push; b.x+=nx*push; b.y+=ny*push;
+      }
+    }
+  }
+  for(const t of tanks){                       // keep everyone out of terrain + frame after shoving
+    pushOutTerrain(t);
+    if(t!==tank && t.entering) continue;        // entering reinforcements aren't frame-clamped yet
+    t.x=Math.max(FRAME+t.r,Math.min(W-FRAME-t.r,t.x));
+    t.y=Math.max(FRAME+t.r,Math.min(H-FRAME-t.r,t.y));
+  }
+}
 function moveEnemy(e,dt){
   e.x+=e.vx*dt; e.y+=e.vy*dt;
   if(e.entering){
@@ -304,6 +327,8 @@ function update(dt){
   }
   // ---- enemies (inert while warping in) ----
   for(const e of enemies){ if(e.spawning) continue; driveEnemy(e, now); moveEnemy(e, dt); trailTank(e,dt); }
+  resolveTankCollisions();    // no stacking — push overlapping tanks apart
+
   // ---- shells ----
   for(let i=shells.length-1;i>=0;i--){
     const sh=shells[i]; sh.life-=dt; if(sh.life<=0){shells.splice(i,1);continue;}
