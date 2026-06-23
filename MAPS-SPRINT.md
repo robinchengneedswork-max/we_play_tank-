@@ -38,23 +38,35 @@ Author maps as **ASCII tilemaps** — arrays of equal-length strings, one char p
 '.' floor   '#' block   'O' hole   'S' player spawn   'e' enemy spawn zone
 ```
 
+A map is an **object** — the tile grid plus metadata (name, spawn style):
+
 ```js
-// example 16×9 map
-[ "################",
-  "#..............#",
-  "#..##....OO....#",
-  "#..##....OO..e.#",
-  "#.....S........#",
-  "#..e....OO..##.#",
-  "#........OO.##.#",
-  "#..............#",
-  "################" ]
+{ name:'Crossfire', spawn:'warp', grid:[
+  "................",
+  "...##....OO.....",
+  "...##....OO..e..",
+  ".....S..........",
+  "..e.....OO..##..",
+  ".........OO.##..",
+  "................" ] }
 ```
 
-**Decision (recommend): fixed grid `COLS×ROWS` (~16×9) stretched to the playfield.** Authored layouts
-stay consistent across screens; cells are slightly non-square on odd aspect ratios — acceptable.
-Cell size = `(W-2·FRAME)/COLS` × `(H-2·FRAME)/ROWS`. (Alternative: square cells with
-arena-derived COLS/ROWS — keeps cells square but makes authored maps reflow; rejected for v1.)
+(The outer wall is the `FRAME`, drawn by the engine — maps don't need a border row.)
+
+**Decisions baked in:**
+- **Fixed grid `COLS×ROWS` (~16×9) stretched to the playfield.** Authored layouts stay consistent
+  across screens; cells slightly non-square on odd aspect ratios — acceptable. Cell size =
+  `(W-2·FRAME)/COLS` × `(H-2·FRAME)/ROWS`.
+- **No drawn grid.** Cells exist only to author + collide; the player never sees a grid.
+
+### Spawn style (per map)
+- **`'warp'` (default):** the standard flow — clear wave → upgrade pick → **in-between screen**
+  (countdown) → enemies **clean-spawn in place** (warp-in, today's behaviour). Use for most maps.
+- **`'siege'` (defend-the-Alamo):** waves **spawn off-screen and drive in** from the edges instead of
+  warping in place. The map should keep its **edges open** so they can enter. The between-wave
+  upgrade pick still happens (preserve roguelike progression), but there's no in-place warp-in — the
+  pressure comes from tanks pouring in. Optional later: stream them in continuously for true siege
+  feel (open question — see below).
 
 **Collision from tiles:** don't collide against individual cells (seams cause snagging). Instead,
 **merge adjacent same-type cells into rectangles** (greedy) at load time → reuse the existing
@@ -73,8 +85,10 @@ authoring + rendering. This makes M0 a near drop-in for today's rect code.
   so nothing changes.
 - Point `reflectStep`, movement push-out, `randSpawnPos`, `segBlocked` at `blockRects` (rename
   `obstacles` → `blockRects` or keep alias).
-- Align the **cosmetic grid to the tile grid** in `render`.
-- Acceptance: the current arena is reproduced from a tilemap; **zero gameplay change**.
+- **Remove the cosmetic grid lines** from `render`. The tile grid is an **internal authoring aid
+  only** (for building maps) — never drawn. The board reads as a clean surface with terrain on it.
+- Acceptance: the current arena is reproduced from a tilemap; **zero gameplay change** (minus the
+  now-removed grid lines).
 
 ### M1 — Holes · 3 pts
 - Add the `hole` type → `holeRects`. Movement push-out includes `holeRects`; `reflectStep`,
@@ -83,14 +97,17 @@ authoring + rendering. This makes M0 a near drop-in for today's rect code.
 - Acceptance: tanks can't cross holes; shells fly over and hit tanks beyond; predict/bank AI shoots
   **across** holes (doesn't treat them as cover); bank shots never bank off a hole edge.
 
-### M2 — Map library + selection · 5 pts
-- Author **6–10 varied maps**: open field, central cross, four quadrants, corridor/maze-lite,
-  hole gauntlet, bank-shot gallery, perimeter cover, diagonal lanes.
-- **Roguelike**: load a fresh map each wave from a shuffled pool (no immediate repeat); spawn the
-  warp-in enemies + player on valid `floor` cells (respect `S`/`e` hints; never spawn trapped).
-- **Sandbox**: a "next map" control (HUD button or in the ⚙ panel) to cycle maps for testing.
-- Acceptance: maps visibly vary wave-to-wave; no soft-locks (player reachable, enemies reachable),
-  verified across a phone-landscape and a laptop aspect ratio.
+### M2 — Map library + selection + spawn styles · 6 pts
+- Author **6–10 varied maps**, a mix of `warp` and a few `siege`: open field, central cross, four
+  quadrants, corridor/maze-lite, hole gauntlet, bank-shot gallery, perimeter cover, diagonal lanes,
+  plus 1–2 open-edged **siege** arenas.
+- **Roguelike**: load a fresh map each wave from a shuffled pool (no immediate repeat).
+  - `warp` maps: spawn enemies + player on valid `floor` cells (respect `S`/`e` hints; never trapped).
+  - `siege` maps: enter enemies from **off-screen edges** (start just outside `FRAME`, drive inward;
+    skip the frame-clamp until they're inside). Player on its `floor` spawn.
+- **Sandbox**: a "next map" control (HUD button or ⚙ panel) to cycle maps for testing.
+- Acceptance: maps visibly vary wave-to-wave; siege maps stream tanks in from off-screen; no
+  soft-locks (player reachable, enemies reach the player), checked on phone-landscape + laptop.
 
 ### M3 — More terrain & nav polish (stretch) · 8 pts
 - **Destructible crates** (break after N hits; later: drop pickups/upgrades — ties into the
@@ -122,6 +139,10 @@ authoring + rendering. This makes M0 a near drop-in for today's rect code.
 - **Aspect ratio** — fixed COLS×ROWS stretches cells; confirm readability/feel on Pixel-landscape
   vs laptop. Revisit square-cell option only if it feels bad.
 - **Readability** — floor/block/hole (and later crate/water) must stay distinct on the warm board;
-  may need outline/shadow cues, not just fill colour.
-- **Grid unification** — once tiles drive layout, the cosmetic 34px grid should become the tile grid
-  (one source of truth) rather than two overlapping grids.
+  may need outline/shadow cues, not just fill colour. (No grid lines to lean on — terrain must read
+  on its own.)
+- **Siege entry vs no-pathfinding** — tanks driving in from off-screen must reach the player past
+  edge terrain; keep siege-map edges open and lanes clear, or they pile up at the border.
+- **Open question — siege cadence:** do siege waves still use the between-wave upgrade screen (clean
+  break, then they pour in), or stream continuously for relentless pressure? Recommend the former for
+  v1 (keeps the roguelike upgrade rhythm); revisit if siege should feel distinctly frantic.
