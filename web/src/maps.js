@@ -8,8 +8,10 @@
 
 const TILE = { FLOOR:'.', BLOCK:'#', HOLE:'O', SPAWN:'S', ENEMY:'e' };
 
-// Map library. Classic = the bank-shot arena (M0) plus a couple of holes (M1):
-// holes block movement but shells fly over them and AI can see/shoot across.
+// Map library (M2). Each map: name, spawn style ('warp' default | 'siege'), and a
+// 16×9 ASCII grid. Kept deliberately OPEN — enemies have no pathfinding (see
+// MAPS-SPRINT caveat), so no enclosed pockets that would trap them or the player.
+// 'siege' maps keep their edges clear so off-screen tanks can drive straight in.
 const MAPS=[
   { name:'Classic', spawn:'warp', grid:[
     "................",
@@ -20,6 +22,105 @@ const MAPS=[
     "..S.......##....",
     "..OO......##....",
     "......e......e..",
+    "................",
+  ]},
+  { name:'Open Field', spawn:'warp', grid:[
+    "................",
+    "................",
+    "....O......O....",
+    "................",
+    "..S..........e..",
+    "................",
+    "....O......O....",
+    "................",
+    "................",
+  ]},
+  { name:'Central Cross', spawn:'warp', grid:[
+    "................",
+    "................",
+    ".......##.......",
+    ".....######.....",
+    "..S..######..e..",
+    ".....######.....",
+    ".......##.......",
+    "................",
+    "................",
+  ]},
+  { name:'Four Quadrants', spawn:'warp', grid:[
+    "................",
+    "..##......##....",
+    "..##......##....",
+    "................",
+    "..S..OOOO....e..",
+    "................",
+    "..##......##....",
+    "..##......##....",
+    "................",
+  ]},
+  { name:'Bank Gallery', spawn:'warp', grid:[
+    "................",
+    "...##...........",
+    "...##.....##....",
+    "..........##....",
+    "..S.........e...",
+    "....##..........",
+    "....##.....##...",
+    "...........##...",
+    "................",
+  ]},
+  { name:'Hole Gauntlet', spawn:'warp', grid:[
+    "................",
+    "...OO..OO..OO...",
+    "...OO..OO..OO...",
+    "................",
+    "..S.........e...",
+    "................",
+    "...OO..OO..OO...",
+    "...OO..OO..OO...",
+    "................",
+  ]},
+  { name:'Perimeter Cover', spawn:'warp', grid:[
+    "................",
+    ".##..........##.",
+    ".##..........##.",
+    "................",
+    "..S.OO..OO..e...",
+    "................",
+    ".##..........##.",
+    ".##..........##.",
+    "................",
+  ]},
+  { name:'Diagonal Lanes', spawn:'warp', grid:[
+    "................",
+    "..##............",
+    ".....##.........",
+    "........##......",
+    "..S........##.e.",
+    "....##..........",
+    ".......##.......",
+    "..........##....",
+    "................",
+  ]},
+  { name:'Siege Keep', spawn:'siege', grid:[
+    "................",
+    "................",
+    "......####......",
+    "......####......",
+    "..S...####...e..",
+    "......####......",
+    "......####......",
+    "................",
+    "................",
+  ]},
+  { name:'Siege Open', spawn:'siege', grid:[
+    "................",
+    "................",
+    "....OO....OO....",
+    "................",
+    "..S..........e..",
+    "................",
+    "....OO....OO....",
+    "................",
     "................",
   ]},
 ];
@@ -76,3 +177,26 @@ function projectMap(){
 
 // Select a map (for M2 rotation / sandbox cycling) and re-project at current size.
 function loadMap(def){ currentMap=buildMap(def); projectMap(); }
+
+// Pixel center of a grid cell at the live canvas size.
+function cellToPx(cell){
+  const cw=(W-2*FRAME)/currentMap.C, chh=(H-2*FRAME)/currentMap.R;
+  return { x:FRAME+(cell.c+0.5)*cw, y:FRAME+(cell.r+0.5)*chh };
+}
+// Player spawn for the current map (its 'S' cell, or a sensible default).
+function mapPlayerSpawn(){
+  return currentMap.playerCell ? cellToPx(currentMap.playerCell) : { x:W*0.16, y:H*0.6 };
+}
+
+// Map rotation — a shuffled bag so every map shows before any repeats, and the
+// first map of a fresh bag never equals the last one played (no immediate repeat).
+let mapBag=[], lastMapIdx=-1;
+function loadNextMap(){
+  if(mapBag.length===0){
+    mapBag=MAPS.map((_,i)=>i);
+    for(let i=mapBag.length-1;i>0;i--){ const j=Math.floor(Math.random()*(i+1)); [mapBag[i],mapBag[j]]=[mapBag[j],mapBag[i]]; }
+    if(mapBag.length>1 && mapBag[mapBag.length-1]===lastMapIdx) [mapBag[0],mapBag[mapBag.length-1]]=[mapBag[mapBag.length-1],mapBag[0]];
+  }
+  lastMapIdx=mapBag.pop();
+  loadMap(MAPS[lastMapIdx]);
+}

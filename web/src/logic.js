@@ -117,6 +117,14 @@ function aimFor(e){
   return bank!==null ? bank : Math.atan2(ty-e.y, tx-e.x);
 }
 function driveEnemy(e, now){
+  if(e.entering){
+    // siege: roll straight in toward the player until inside the arena, no shooting yet.
+    // Force a minimum entry speed so even stationary types still drive in (then stop).
+    const dx=tank.x-e.x, dy=tank.y-e.y, d=Math.hypot(dx,dy)||1, sp=Math.max(e.speed,70);
+    e.vx=dx/d*sp; e.vy=dy/d*sp;
+    const md=Math.atan2(e.vy,e.vx); let bd=((md-e.bodyAngle+Math.PI)%(2*Math.PI))-Math.PI; e.bodyAngle+=bd*0.1;
+    return;
+  }
   const dx=tank.x-e.x, dy=tank.y-e.y, dist=Math.hypot(dx,dy)||1;
   // movement: hold a band around `engage`
   if(e.speed>0){
@@ -162,8 +170,13 @@ function pushOutTerrain(t){
 }
 function moveEnemy(e,dt){
   e.x+=e.vx*dt; e.y+=e.vy*dt;
-  e.x=Math.max(FRAME+e.r,Math.min(W-FRAME-e.r,e.x));
-  e.y=Math.max(FRAME+e.r,Math.min(H-FRAME-e.r,e.y));
+  if(e.entering){
+    // siege: no frame clamp until the tank's center crosses into the arena, then clamp normally
+    if(e.x>=FRAME && e.x<=W-FRAME && e.y>=FRAME && e.y<=H-FRAME) e.entering=false;
+  } else {
+    e.x=Math.max(FRAME+e.r,Math.min(W-FRAME-e.r,e.x));
+    e.y=Math.max(FRAME+e.r,Math.min(H-FRAME-e.r,e.y));
+  }
   pushOutTerrain(e);
 }
 

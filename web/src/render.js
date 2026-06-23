@@ -102,6 +102,7 @@ function render(){
   ctx.globalAlpha=1;
   // enemies
   for(const e of enemies){
+    if(e.spawning && e.entering) continue;       // siege: waiting off-screen, pours in when the wave goes live
     if(e.spawning){                              // warp-in telegraph during the countdown
       ctx.globalAlpha=0.5; drawTank(e, e.color, darken(e.color,0.6));
       ctx.globalAlpha=0.7; ctx.beginPath();ctx.arc(e.x,e.y,e.r+8,0,7);

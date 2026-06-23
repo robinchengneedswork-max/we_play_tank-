@@ -85,11 +85,11 @@ html,body{height:100%;overflow:hidden;background:#1a1916;
 .go-btns{display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:center;}
 #sbUpList{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;max-width:640px;}
 #sbUp .panel-btn{width:auto;margin:0;padding:12px 18px;}
-/* sandbox HUD upgrade button (round, like menu/gear) */
-#sbUpgradeBtn{pointer-events:auto;cursor:pointer;width:40px;height:40px;border-radius:50%;border:none;
+/* sandbox HUD buttons (round, like menu/gear) */
+#sbUpgradeBtn,#sbMapBtn{pointer-events:auto;cursor:pointer;width:40px;height:40px;border-radius:50%;border:none;
   background:rgba(255,255,255,.66);font-size:18px;display:flex;align-items:center;justify-content:center;
   box-shadow:0 1px 3px rgba(0,0,0,.2);}
-#sbUpgradeBtn[hidden]{display:none;}
+#sbUpgradeBtn[hidden],#sbMapBtn[hidden]{display:none;}
 
 /* Landscape-first: cover the screen with a rotate prompt while in portrait */
 #rotate{display:none;}

@@ -80,9 +80,42 @@ function randSpawnPos(){
   return {x:W/2,y:H/2};
 }
 
+// Warp-style enemy spawn: a clear floor point, biased toward the map's 'e' hint
+// cells when it has them, falling back to anywhere valid (never on block/hole/player).
+function enemySpawnPos(){
+  const hints=(currentMap&&currentMap.enemyCells)||[];
+  for(let t=0;t<40;t++){
+    let x,y;
+    if(hints.length && t<20){ const p=cellToPx(hints[(Math.random()*hints.length)|0]);
+      x=p.x+(Math.random()-0.5)*80; y=p.y+(Math.random()-0.5)*80; }
+    else { x=FRAME+30+Math.random()*(W-2*FRAME-60); y=FRAME+30+Math.random()*(H-2*FRAME-60); }
+    if(Math.hypot(x-tank.x,y-tank.y)<170) continue;
+    const onTerrain=o=>x>o.x-22&&x<o.x+o.w+22&&y>o.y-22&&y<o.y+o.h+22;
+    if(blockRects.some(onTerrain)||holeRects.some(onTerrain)) continue;
+    return {x,y};
+  }
+  return randSpawnPos();
+}
+// Siege-style spawn: just outside a random edge, aligned along it; the tank then
+// drives inward (the frame-clamp is skipped while `entering` — see moveEnemy).
+function siegeEntryPos(r){
+  const m=r+16, ry=()=>FRAME+r+Math.random()*(H-2*FRAME-2*r), rx=()=>FRAME+r+Math.random()*(W-2*FRAME-2*r);
+  switch(Math.floor(Math.random()*4)){
+    case 0: return {x:FRAME-m,        y:ry()};   // left
+    case 1: return {x:W-FRAME+m,      y:ry()};   // right
+    case 2: return {x:rx(),           y:FRAME-m};// top
+    default:return {x:rx(),           y:H-FRAME+m};// bottom
+  }
+}
+// Position an enemy for the start of a wave per the current map's spawn style.
+function placeForWave(e){
+  if(currentMap && currentMap.def.spawn==='siege'){ const p=siegeEntryPos(e.r); e.x=p.x; e.y=p.y; e.entering=true; }
+  else { const p=enemySpawnPos(); e.x=p.x; e.y=p.y; e.entering=false; }
+}
+
 // Sandbox: a respawning range of M1 types to test weapons/feel against.
 function spawnSandboxSet(){
-  ['brown','grey','teal','red'].forEach(tp=>{ const p=randSpawnPos(); spawnEnemy(tp,p.x,p.y); });
+  ['brown','grey','teal','red'].forEach(tp=>{ const e=spawnEnemy(tp,0,0); if(e){ const p=enemySpawnPos(); e.x=p.x; e.y=p.y; } });
 }
 
 // Roguelike wave composition (T7). Hand-authored opener; procedural escalation at 8+.
@@ -106,21 +139,23 @@ function waveRoster(level){
   if(level>=9 && !out.includes('black')) out[1]='black';
   return out;
 }
-// Spawn the current level's wave in "warp-in" state and start the countdown.
-// Between-level cleanup: clear leftover mines and tread marks (lets you re-hunt Whites).
+// Load a fresh map, spawn the level's wave (warp-in or off-screen siege per the
+// map), and start the countdown. Cleanup: wipe leftovers so nothing from the
+// cleared wave (esp. in-flight shells) carries into the frozen warp-in.
 function beginWave(){
-  // wipe leftovers so nothing from the cleared wave (esp. in-flight shells) carries
-  // into the countdown and hits the frozen player during warp-in.
+  loadNextMap();                 // rotate to a new arena each wave
   mines.length=0; tracks.length=0; shells.length=0; smoke.length=0; particles.length=0;
-  waveRoster(run.level).forEach(tp=>{ const p=randSpawnPos(); const e=spawnEnemy(tp,p.x,p.y); if(e) e.spawning=true; });
+  resetPlayerToSpawn();          // player to the new map's 'S'
+  waveRoster(run.level).forEach(tp=>{ const e=spawnEnemy(tp,0,0); if(e){ placeForWave(e); e.spawning=true; } });
   run.phase='intermission'; run.timer=INTERMISSION_MS;
   updateHud();
 }
 function nextWave(){ run.level++; beginWave(); }
 
-// Put the player tank back at its spawn, stationary and re-aimed up.
+// Put the player tank back at the current map's spawn, stationary and re-aimed up.
 function resetPlayerToSpawn(){
-  tank.x=W*0.16; tank.y=H*0.6; tank.vx=0; tank.vy=0;
+  const p=mapPlayerSpawn();
+  tank.x=p.x; tank.y=p.y; tank.vx=0; tank.vy=0;
   tank.bodyAngle=0; tank.turretAngle=-Math.PI/2; tank.aimTarget=tank.turretAngle;
   tank.lastFire=0; tank.fireSlowUntil=0;
 }
@@ -128,11 +163,18 @@ function resetPlayerToSpawn(){
 // Reset the arena for a fresh start of either mode.
 function resetArena(){
   shells.length=0; particles.length=0; smoke.length=0; mines.length=0; tracks.length=0; enemies.length=0;
-  resetPlayerToSpawn();
   tank.team='player'; tank.maxHp=run.maxHp; tank.hp=run.maxHp;
   score=0;
-  if(gameMode==='sandbox')        spawnSandboxSet();
-  else if(gameMode==='roguelike') beginWave();
+  if(gameMode==='sandbox'){ loadNextMap(); resetPlayerToSpawn(); spawnSandboxSet(); }
+  else if(gameMode==='roguelike') beginWave();   // beginWave loads the map + places the player
+}
+
+// Sandbox: cycle to the next map (clears the range + respawns it on the new arena).
+function sandboxNextMap(){
+  loadNextMap();
+  shells.length=0; smoke.length=0; mines.length=0; tracks.length=0; particles.length=0; enemies.length=0;
+  resetPlayerToSpawn();
+  spawnSandboxSet();
 }
 
 // Death with lives left: respawn the player and clear projectiles, but keep the
@@ -141,10 +183,10 @@ function resetArena(){
 function restartLevel(){
   if(!(gameMode==='roguelike' && run.phase==='dead')) return;   // guard the delayed call
   shells.length=0; mines.length=0; smoke.length=0; particles.length=0; tracks.length=0;
-  resetPlayerToSpawn();
+  resetPlayerToSpawn();          // same map (retry), so spawn is unchanged
   const now=performance.now();
   for(const e of enemies){
-    const p=randSpawnPos(); e.x=p.x; e.y=p.y; e.vx=0; e.vy=0;
+    placeForWave(e); e.vx=0; e.vy=0;            // re-warp / re-enter per the map's style
     e.spawning=true; e.cloakStart=0; e.lastFire=0;
     e.nextFireAt = now + e.fireGap[0] + Math.random()*(e.fireGap[1]-e.fireGap[0]);
     e.nextMineAt = now + 900 + Math.random()*1600;

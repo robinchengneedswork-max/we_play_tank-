@@ -13,6 +13,7 @@ function setHudForMode(){
   document.getElementById('statHits').hidden    = (gameMode!=='sandbox');
   document.getElementById('statRun').hidden     = (gameMode!=='roguelike');
   document.getElementById('sbUpgradeBtn').hidden= (gameMode!=='sandbox');
+  document.getElementById('sbMapBtn').hidden    = (gameMode!=='sandbox');
 }
 
 async function startMode(m){

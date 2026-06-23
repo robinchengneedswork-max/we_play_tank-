@@ -104,5 +104,6 @@ function openSandboxUpgrades(){
   sbUp.classList.add('active');
 }
 document.getElementById('sbUpgradeBtn').onclick=openSandboxUpgrades;
+document.getElementById('sbMapBtn').onclick=sandboxNextMap;
 document.getElementById('sbUpClear').onclick=()=>{ run.mods=freshMods(); run.maxHp=3; run.hp=3; tank.maxHp=3; tank.hp=3; updateHud(); };
 document.getElementById('sbUpClose').onclick=()=>{ sbUp.classList.remove('active'); paused=false; };
