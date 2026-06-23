@@ -4,7 +4,9 @@
 const tank={x:0,y:0,r:17,bodyAngle:0,turretAngle:-Math.PI/2,vx:0,vy:0,
             team:'player',hp:3,maxHp:3,lastFire:0,fireSlowUntil:0};
 let blockRects=[];       // solid obstacle rects (pixel space); baked from the map by projectMap()
-let holeRects=[];        // pits: block movement, but shells fly over + LOS is clear (M1)
+let holeRects=[];        // pits (+ water, tagged): block movement, but shells fly over + LOS clear (M1)
+let crates=[];           // destructible cover {x,y,w,h,hp,max,crate} — bounce+block until broken (M3)
+let pickups=[];          // crate drops {x,y,kind,life,max}: 'heal' / 'upgrade' (M3)
 let enemies=[];          // typed enemy tanks (see data/types.js)
 let shells=[];           // {x,y,vx,vy,b,life,team,owner}
 let particles=[];        // sparks (muzzle / hit / death bursts)
@@ -74,7 +76,7 @@ function randSpawnPos(){
     const y=FRAME+30+Math.random()*(H-2*FRAME-60);
     if(Math.hypot(x-tank.x,y-tank.y)<200) continue;
     const onTerrain=o=>x>o.x-24&&x<o.x+o.w+24&&y>o.y-24&&y<o.y+o.h+24;
-    if(blockRects.some(onTerrain) || holeRects.some(onTerrain)) continue;
+    if(blockRects.some(onTerrain) || holeRects.some(onTerrain) || crates.some(onTerrain)) continue;
     return {x,y};
   }
   return {x:W/2,y:H/2};
@@ -91,7 +93,7 @@ function enemySpawnPos(){
     else { x=FRAME+30+Math.random()*(W-2*FRAME-60); y=FRAME+30+Math.random()*(H-2*FRAME-60); }
     if(Math.hypot(x-tank.x,y-tank.y)<170) continue;
     const onTerrain=o=>x>o.x-22&&x<o.x+o.w+22&&y>o.y-22&&y<o.y+o.h+22;
-    if(blockRects.some(onTerrain)||holeRects.some(onTerrain)) continue;
+    if(blockRects.some(onTerrain)||holeRects.some(onTerrain)||crates.some(onTerrain)) continue;
     return {x,y};
   }
   return randSpawnPos();
@@ -143,8 +145,8 @@ function waveRoster(level){
 // map), and start the countdown. Cleanup: wipe leftovers so nothing from the
 // cleared wave (esp. in-flight shells) carries into the frozen warp-in.
 function beginWave(){
-  loadNextMap();                 // rotate to a new arena each wave
-  mines.length=0; tracks.length=0; shells.length=0; smoke.length=0; particles.length=0;
+  loadNextMap();                 // rotate to a new arena each wave (rebuilds crates at full hp)
+  mines.length=0; tracks.length=0; shells.length=0; smoke.length=0; particles.length=0; pickups.length=0;
   resetPlayerToSpawn();          // player to the new map's 'S'
   waveRoster(run.level).forEach(tp=>{ const e=spawnEnemy(tp,0,0); if(e){ placeForWave(e); e.spawning=true; } });
   run.phase='intermission'; run.timer=INTERMISSION_MS;
@@ -162,7 +164,7 @@ function resetPlayerToSpawn(){
 
 // Reset the arena for a fresh start of either mode.
 function resetArena(){
-  shells.length=0; particles.length=0; smoke.length=0; mines.length=0; tracks.length=0; enemies.length=0;
+  shells.length=0; particles.length=0; smoke.length=0; mines.length=0; tracks.length=0; enemies.length=0; pickups.length=0;
   tank.team='player'; tank.maxHp=run.maxHp; tank.hp=run.maxHp;
   score=0;
   if(gameMode==='sandbox'){ loadNextMap(); resetPlayerToSpawn(); spawnSandboxSet(); }
@@ -172,7 +174,7 @@ function resetArena(){
 // Sandbox: cycle to the next map (clears the range + respawns it on the new arena).
 function sandboxNextMap(){
   loadNextMap();
-  shells.length=0; smoke.length=0; mines.length=0; tracks.length=0; particles.length=0; enemies.length=0;
+  shells.length=0; smoke.length=0; mines.length=0; tracks.length=0; particles.length=0; enemies.length=0; pickups.length=0;
   resetPlayerToSpawn();
   spawnSandboxSet();
 }
@@ -182,7 +184,8 @@ function sandboxNextMap(){
 // survivors at fresh spots and re-enters the intermission breather (frozen start).
 function restartLevel(){
   if(!(gameMode==='roguelike' && run.phase==='dead')) return;   // guard the delayed call
-  shells.length=0; mines.length=0; smoke.length=0; particles.length=0; tracks.length=0;
+  shells.length=0; mines.length=0; smoke.length=0; particles.length=0; tracks.length=0; pickups.length=0;
+  projectMap();                  // same map, but rebuild crates to full hp for the retry
   resetPlayerToSpawn();          // same map (retry), so spawn is unchanged
   const now=performance.now();
   for(const e of enemies){

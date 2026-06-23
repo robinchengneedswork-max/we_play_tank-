@@ -69,17 +69,41 @@ function render(){
     ctx.restore();
   }
   ctx.globalAlpha=1;
-  // holes — sunken pits (drive-blocked, but shells & sightlines pass over).
-  // Top lip is the darkest band so they read as recessed (opposite of a raised block).
+  // holes & water — drive-blocked, but shells & sightlines pass over.
+  // Hole: top lip darkest → reads recessed. Water: blue with a light surface band.
   for(const o of holeRects){
-    ctx.fillStyle=getCSS('--hole-rim');  ctx.fillRect(o.x,o.y,o.w,o.h);
-    ctx.fillStyle=getCSS('--hole');      ctx.fillRect(o.x+2,o.y+2,o.w-4,o.h-4);
-    ctx.fillStyle=getCSS('--hole-floor');ctx.fillRect(o.x+2,o.y+6,o.w-4,o.h-8);
+    if(o.water){
+      ctx.fillStyle=getCSS('--water-rim'); ctx.fillRect(o.x,o.y,o.w,o.h);
+      ctx.fillStyle=getCSS('--water');     ctx.fillRect(o.x+2,o.y+2,o.w-4,o.h-4);
+      ctx.globalAlpha=0.5;ctx.fillStyle=getCSS('--water-top');ctx.fillRect(o.x+3,o.y+3,o.w-6,3);ctx.globalAlpha=1;
+    } else {
+      ctx.fillStyle=getCSS('--hole-rim');  ctx.fillRect(o.x,o.y,o.w,o.h);
+      ctx.fillStyle=getCSS('--hole');      ctx.fillRect(o.x+2,o.y+2,o.w-4,o.h-4);
+      ctx.fillStyle=getCSS('--hole-floor');ctx.fillRect(o.x+2,o.y+6,o.w-4,o.h-8);
+    }
   }
   // blocks — raised slabs (lighter top lip)
   for(const o of blockRects){
     ctx.fillStyle=getCSS('--slate');ctx.fillRect(o.x,o.y,o.w,o.h);
     ctx.fillStyle=getCSS('--slate-top');ctx.fillRect(o.x,o.y,o.w,5);
+  }
+  // crates — wooden destructible cover; darken as they take damage
+  for(const c of crates){
+    ctx.fillStyle=getCSS('--crate');    ctx.fillRect(c.x,c.y,c.w,c.h);
+    ctx.fillStyle=getCSS('--crate-top');ctx.fillRect(c.x,c.y,c.w,4);
+    ctx.strokeStyle=getCSS('--crate-edge');ctx.lineWidth=2;
+    ctx.strokeRect(c.x+1,c.y+1,c.w-2,c.h-2);
+    ctx.beginPath();ctx.moveTo(c.x+3,c.y+3);ctx.lineTo(c.x+c.w-3,c.y+c.h-3);
+    ctx.moveTo(c.x+c.w-3,c.y+3);ctx.lineTo(c.x+3,c.y+c.h-3);ctx.stroke();
+    if(c.hp<c.max){ ctx.globalAlpha=(1-c.hp/c.max)*0.5;ctx.fillStyle='#2a1d10';ctx.fillRect(c.x,c.y,c.w,c.h);ctx.globalAlpha=1; }
+  }
+  // pickups — crate drops, pulsing on the floor (heal = green +, upgrade = gold ↑)
+  for(const p of pickups){
+    const k=Math.min(1,p.life/p.max), a=Math.min(1,k*2), pulse=0.65+0.35*Math.sin(performance.now()/180);
+    ctx.globalAlpha=a*pulse; ctx.fillStyle=p.kind==='heal'?'#5fbf6a':'#e8c84a';
+    ctx.beginPath();ctx.arc(p.x,p.y,8,0,7);ctx.fill();
+    ctx.globalAlpha=a; ctx.fillStyle='#1a1916';ctx.font='bold 12px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(p.kind==='heal'?'+':'↑',p.x,p.y+0.5); ctx.globalAlpha=1;
   }
   // mines
   for(const m of mines){

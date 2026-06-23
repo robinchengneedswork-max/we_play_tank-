@@ -6,7 +6,8 @@
 // Authoring grid is 16×9 (landscape-first); the outer wall is the engine FRAME,
 // so maps carry no border row.
 
-const TILE = { FLOOR:'.', BLOCK:'#', HOLE:'O', SPAWN:'S', ENEMY:'e' };
+const TILE = { FLOOR:'.', BLOCK:'#', HOLE:'O', WATER:'W', CRATE:'C', SPAWN:'S', ENEMY:'e' };
+const CRATE_HP = 2;              // shots a crate takes before it breaks (M3)
 
 // Map library (M2). Each map: name, spawn style ('warp' default | 'siege'), and a
 // 16×9 ASCII grid. Kept deliberately OPEN — enemies have no pathfinding (see
@@ -123,6 +124,28 @@ const MAPS=[
     "................",
     "................",
   ]},
+  { name:'Crate Yard', spawn:'warp', grid:[
+    "................",
+    "...C...C...C....",
+    "................",
+    "....##.....##...",
+    "..S....C.....e..",
+    "....##.....##...",
+    "................",
+    "...C...C...C....",
+    "................",
+  ]},
+  { name:'Marsh', spawn:'warp', grid:[
+    "................",
+    "..WW.......WW...",
+    "..WW.......WW...",
+    "......OOOO......",
+    "..S.WW...WW..e..",
+    "......OOOO......",
+    "..WW.......WW...",
+    "..WW.......WW...",
+    "................",
+  ]},
 ];
 
 // Greedy-merge all cells of char `ch` into the fewest axis-aligned rectangles
@@ -153,13 +176,15 @@ function buildMap(def){
   const grid=def.grid, C=grid[0].length, R=grid.length;
   const blockCells=mergeCellRects(grid, TILE.BLOCK);
   const holeCells =mergeCellRects(grid, TILE.HOLE);
+  const waterCells=mergeCellRects(grid, TILE.WATER);
+  const crateCells=mergeCellRects(grid, TILE.CRATE);
   let playerCell=null; const enemyCells=[];
   for(let r=0;r<R;r++) for(let c=0;c<C;c++){
     const ch=grid[r][c];
     if(ch===TILE.SPAWN) playerCell={c,r};
     else if(ch===TILE.ENEMY) enemyCells.push({c,r});
   }
-  return { def, C, R, blockCells, holeCells, playerCell, enemyCells };
+  return { def, C, R, blockCells, holeCells, waterCells, crateCells, playerCell, enemyCells };
 }
 
 let currentMap = buildMap(MAPS[0]);
@@ -172,7 +197,11 @@ function projectMap(){
   const cw=(W-2*FRAME)/currentMap.C, chh=(H-2*FRAME)/currentMap.R;
   const bake=cells=>cells.map(b=>({ x:FRAME+b.c*cw, y:FRAME+b.r*chh, w:b.w*cw, h:b.h*chh }));
   blockRects.length=0; for(const r of bake(currentMap.blockCells)) blockRects.push(r);
-  holeRects.length=0;  for(const r of bake(currentMap.holeCells))  holeRects.push(r);
+  holeRects.length=0;
+  for(const r of bake(currentMap.holeCells))  holeRects.push(r);
+  for(const r of bake(currentMap.waterCells)){ r.water=true; holeRects.push(r); }   // water = hole (move-block) with a wet look
+  crates.length=0;
+  for(const r of bake(currentMap.crateCells)){ r.crate=true; r.hp=CRATE_HP; r.max=CRATE_HP; crates.push(r); }
 }
 
 // Select a map (for M2 rotation / sandbox cycling) and re-project at current size.

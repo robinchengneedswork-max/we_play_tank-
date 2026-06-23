@@ -1,6 +1,8 @@
 :root{
   --board:#e7ddc4; --frame:#b9a87e;
   --hole:#3b352b; --hole-rim:#2a261f; --hole-floor:#4a4336;
+  --water:#3f7d8c; --water-rim:#2c5b67; --water-top:#9fd0db;
+  --crate:#a9824e; --crate-top:#c6a06a; --crate-edge:#6f5430;
   --ink:#2c2a26; --slate:#6b7280; --slate-top:#8c93a0;
   --tank:#3b6fb5; --tank-dark:#2b4f82; --enemy:#c0584a;
   --shell:#33312c; --fire:#d9483b; --panel:#211f1b;
