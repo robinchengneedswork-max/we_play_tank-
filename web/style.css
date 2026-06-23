@@ -69,6 +69,7 @@ html,body{height:100%;overflow:hidden;background:#1a1916;
   justify-content:center;gap:18px;padding:24px;background:rgba(20,19,16,.72);color:#f3ecd9;touch-action:none;}
 #upgrade.active{display:flex;}
 #upgrade h2{font-size:18px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;opacity:.82;}
+.up-cost{font-size:13px;font-weight:700;opacity:.85;margin-top:-8px;color:#e8c84a;}
 #upgradeCards{display:flex;gap:12px;flex-wrap:wrap;justify-content:center;max-width:600px;}
 .up-card{cursor:pointer;border:none;font:inherit;text-align:left;width:min(42vw,170px);
   background:#2c2925;color:#f3ecd9;border-radius:14px;padding:15px 16px;box-shadow:0 3px 0 rgba(0,0,0,.35);

@@ -107,9 +107,15 @@ function render(){
     ctx.strokeRect(holdRect.x+1,holdRect.y+1,holdRect.w-2,holdRect.h-2);
     ctx.restore();
   }
-  // pickups — crate drops, pulsing on the floor (heal = green +, upgrade = gold ↑)
+  // pickups — drops pulsing on the floor (scrap = bronze nut · heal = green + · upgrade = gold ↑)
   for(const p of pickups){
     const k=Math.min(1,p.life/p.max), a=Math.min(1,k*2), pulse=0.65+0.35*Math.sin(performance.now()/180);
+    if(p.kind==='scrap'){
+      ctx.save(); ctx.globalAlpha=a*pulse; ctx.translate(p.x,p.y); ctx.rotate(Math.PI/4);
+      ctx.fillStyle='#c9a063'; ctx.fillRect(-5,-5,10,10);
+      ctx.fillStyle='#8a6a3a'; ctx.fillRect(-5,-5,10,3);
+      ctx.restore(); ctx.globalAlpha=1; continue;
+    }
     ctx.globalAlpha=a*pulse; ctx.fillStyle=p.kind==='heal'?'#5fbf6a':'#e8c84a';
     ctx.beginPath();ctx.arc(p.x,p.y,8,0,7);ctx.fill();
     ctx.globalAlpha=a; ctx.fillStyle='#1a1916';ctx.font='bold 12px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';

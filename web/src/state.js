@@ -19,16 +19,22 @@ let shake=0;
 
 // Roguelike run state. `mods` are the player's run upgrades, layered over cfg
 // as multipliers/adders (so cfg stays the live-tunable baseline; sandbox = baseline).
-const run={ level:1, kills:0, hp:3, maxHp:3, phase:'fighting', timer:0, mods:freshMods(), siege:null };
+const run={ level:1, kills:0, hp:3, maxHp:3, phase:'fighting', timer:0, mods:freshMods(), siege:null, scrap:0, upgradesTaken:0 };
 function freshMods(){ return {move:1, turret:1, cd:1, shell:1, maxShells:0, bounce:0, fireSlow:1}; }
 function resetRun(){
   run.level=1; run.kills=0; run.maxHp=3; run.hp=run.maxHp;
   run.phase='fighting'; run.timer=0; run.mods=freshMods(); run.siege=null;
+  run.scrap=0; run.upgradesTaken=0;
 }
 const INTERMISSION_MS=2600;   // breather + countdown before a wave goes live
 // Siege rework: assault→hold objective. `run.siege` = {phase:'assault'|'hold', timer, max, nextSpawn}.
 const HOLD_MS=22000;          // king-of-the-hill hold duration (ticks only while you're in the zone)
 const REINFORCE_GAP=2600;     // ms between reinforcement spawns during the hold
+// Scrap economy: kills drop scrap (collect by driving over it); upgrades cost scrap
+// and the price climbs per purchase, so upgrades are earned, not every-wave.
+const SCRAP_LIFE=18;          // seconds a scrap drop lingers before fading
+const UPGRADE_BASE=3, UPGRADE_STEP=2;
+function upgradeCost(){ return UPGRADE_BASE + run.upgradesTaken*UPGRADE_STEP; }
 
 // Upgrade pool offered between waves. apply() mutates run.mods (or HP).
 const UPGRADES=[

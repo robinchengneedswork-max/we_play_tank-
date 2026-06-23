@@ -383,7 +383,7 @@ function burst(x,y,color,n){
 function damageTank(t, dmg){
   if(t.team==='player'){
     if(gameMode==='roguelike'){
-      if(run.phase==='dead') return;      // already gone
+      if(run.phase==='dead' || run.phase==='upgrade') return;   // already gone / wave already won
       onPlayerDeath();                     // any hit is lethal → lose a life, retry the wave
     } else {                               // sandbox player is immortal (feedback only)
       burst(t.x,t.y,'#ffffff',12);
@@ -405,10 +405,12 @@ function killEnemy(e){
   burst(e.x,e.y,e.color,16); SFX.explode();
   if(cfg.shake) shake=Math.min(shake+6,11);
   if(cfg.haptics&&navigator.vibrate) navigator.vibrate([12,28,12]);
-  if(gameMode==='roguelike'){ run.kills++; updateHud();
+  if(gameMode==='roguelike'){ run.kills++;
+    pickups.push({x:e.x,y:e.y,kind:'scrap',value:1,life:SCRAP_LIFE,max:SCRAP_LIFE});  // drop scrap to go collect
+    updateHud();
     if(enemies.length===0){
       if(run.siege){ if(run.siege.phase==='assault') capturePoint(); }   // fortress cleared → start the hold
-      else offerUpgrade();                                               // warp: clear-all → upgrade
+      else finishWave();                                                 // warp: clear-all → maybe-upgrade
     }
   }
   else if(gameMode==='sandbox'){ updateHud(); const p=randSpawnPos(); spawnEnemy(e.type,p.x,p.y); }
@@ -444,6 +446,7 @@ function maybeDropPickup(x,y){
   else if(r<0.62) pickups.push({x,y,kind:'upgrade',life:11,max:11});
 }
 function applyPickup(p){
+  if(p.kind==='scrap'){ run.scrap+=p.value; burst(p.x,p.y,'#caa46a',6); SFX.hit(); updateHud(); return; }
   if(p.kind==='heal'){ if(run.hp<run.maxHp){ run.hp++; tank.hp=run.hp; } burst(p.x,p.y,'#5fbf6a',14); }
   else { const u=pickUpgrades(1)[0]; if(u) u.apply(); burst(p.x,p.y,'#e8c84a',14); }
   SFX.waveStart(); updateHud();
@@ -472,10 +475,12 @@ function spawnReinforcement(){     // one fresh attacker, driving in from an aut
   const e=spawnEnemy(roster[(Math.random()*roster.length)|0], 0, 0); if(!e) return;
   const p=reinforceSpawn(e.r); e.x=p.x; e.y=p.y; e.entering=true; e.spawning=false;
 }
-function completeSiege(){          // held long enough → attackers break off; on to the upgrade
+function completeSiege(){          // held long enough → attackers break off; collect, then maybe upgrade
   enemies.length=0; shells.length=0;
-  offerUpgrade();
+  finishWave();
 }
+// Wave cleared: only open the upgrade pick if you've banked enough scrap; else roll on.
+function finishWave(){ if(run.scrap>=upgradeCost()) offerUpgrade(); else nextWave(); }
 function updateSiege(dt, now){
   if(!run.siege || run.phase!=='fighting' || run.siege.phase!=='hold') return;
   if(inHoldZone(tank)) run.siege.timer-=dt*1000;        // KotH: clock only ticks while you hold the point

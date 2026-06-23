@@ -60,7 +60,7 @@ const elHits=document.getElementById('statHits');
 const elRun=document.getElementById('statRun');
 function updateHud(){
   elHits.textContent='Hits '+score;
-  elRun.textContent='Lv '+run.level+' · '+run.kills+' kills · '+'♥'.repeat(run.hp);
+  elRun.textContent='Lv '+run.level+' · '+'♥'.repeat(run.hp)+' · ◆'+run.scrap;
 }
 
 // ---- between-wave upgrade pick (3 cards; pauses the sim via run.phase==='upgrade') ----
@@ -68,16 +68,19 @@ const upOverlay=document.getElementById('upgrade');
 const upCards=document.getElementById('upgradeCards');
 function offerUpgrade(){
   run.phase='upgrade';
+  const cost=upgradeCost();
+  document.getElementById('upCost').textContent='◆ '+cost+' scrap   (you have '+run.scrap+')';
   upCards.innerHTML='';
   pickUpgrades(3).forEach(u=>{
     const b=document.createElement('button');
     b.className='up-card';
     b.innerHTML='<b>'+u.name+'</b><small>'+u.desc+'</small>';
-    b.onclick=()=>{ u.apply(); updateHud(); upOverlay.classList.remove('active'); nextWave(); };
+    b.onclick=()=>{ run.scrap-=cost; run.upgradesTaken++; u.apply(); updateHud(); upOverlay.classList.remove('active'); nextWave(); };
     upCards.appendChild(b);
   });
   upOverlay.classList.add('active');
 }
+document.getElementById('upSkip').onclick=()=>{ upOverlay.classList.remove('active'); nextWave(); };
 
 // ---- game over / run summary ----
 const gameover=document.getElementById('gameover');
