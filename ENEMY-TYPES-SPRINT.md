@@ -75,6 +75,14 @@ first wall.
 
 ## Milestone 2 — Smart aiming + Green · ~8 pts
 
+> **STATUS: M2 done in `web/` (2026-06-23).** T5 predict aim (iterative intercept from player
+> velocity + shell speed), T6 Green (stationary predict sniper + approximate 1-bounce **bank shots**
+> via wall-mirroring with LOS checks in `logic.js` `aimFor`/`bankAim`/`segBlocked`), and T7 wave
+> composition (`WAVES` table in `state.js`, procedural at 8+). Also: **rocket shells render as
+> elongated projectiles with an exhaust flame** (shell `rocket` flag → `render.js`). Yellow & White
+> are intentionally held out of the wave table until M3 (mines/invisibility). Predictive accuracy is
+> currently un-jittered — add per-type error in M3 polish if it feels unfair.
+
 **T5 — Aim modes in `driveEnemy`** · 2 pts — branch on `t.aim`:
 - `track`: current direct angle to player.
 - `predict`: lead the target — estimate intercept from player velocity (`tgt.vx,tgt.vy`) and

@@ -53,18 +53,25 @@ function spawnSandboxSet(){
   ['brown','grey','teal','red'].forEach(tp=>{ const p=randSpawnPos(); spawnEnemy(tp,p.x,p.y); });
 }
 
-// Roguelike waves. Minimal ramp for now — full composition table is sprint T7.
+// Roguelike wave composition (T7). Hand-authored opener; procedural escalation at 8+.
+// Yellow/White are held back to M3 (their mine/invisibility signatures aren't built yet).
+const WAVES=[
+  null,                                               // [0] unused (waves are 1-indexed)
+  ['brown','brown','brown'],
+  ['brown','brown','grey','grey'],
+  ['grey','grey','grey','teal'],
+  ['grey','grey','red','teal'],
+  ['red','red','green','teal','teal'],
+  ['red','red','green','purple','teal'],
+  ['purple','red','red','green','green','teal'],
+];
 function waveRoster(level){
-  if(level<=1) return ['brown','brown','brown'];      // gentle opener: lazy stationary tanks
-  const out=[]; const n=Math.min(3+Math.ceil((level-1)*1.2),10);
-  for(let i=0;i<n;i++){
-    const r=Math.random(); let tp;
-    if(level<=2)      tp = r<0.5 ?'brown':'grey';
-    else if(level<=4) tp = r<0.4 ?'grey' : r<0.7?'brown':'teal';
-    else if(level<=6) tp = r<0.35?'grey' : r<0.6?'red'  : r<0.8?'teal':'yellow';
-    else              tp = r<0.25?'red'  : r<0.45?'teal': r<0.6?'green': r<0.78?'purple': r<0.9?'yellow':'grey';
-    out.push(tp);
-  }
+  if(level<WAVES.length) return WAVES[level].slice();
+  // 8+: procedural escalation from the working roster, introduce Black, cap ~12
+  const pool=['grey','teal','red','green','purple','black'];
+  const n=Math.min(6+(level-7),12);
+  const out=[]; for(let i=0;i<n;i++) out.push(pool[Math.floor(Math.random()*pool.length)]);
+  if(level>=9 && !out.includes('black')) out[0]='black';
   return out;
 }
 // Spawn the current level's wave in "warp-in" state and start the countdown.

@@ -16,7 +16,7 @@ function fire(t, aim){
   t.lastFire=now;
   const tipX=t.x+Math.cos(aim)*(t.r+10);
   const tipY=t.y+Math.sin(aim)*(t.r+10);
-  shells.push({x:tipX,y:tipY,vx:Math.cos(aim)*speed,vy:Math.sin(aim)*speed,b:bounce,life:3.2,team:t.team,owner:t});
+  shells.push({x:tipX,y:tipY,vx:Math.cos(aim)*speed,vy:Math.sin(aim)*speed,b:bounce,life:3.2,team:t.team,owner:t,rocket:!!t.rocket});
   for(let i=0;i<6;i++){const sp=60+Math.random()*120,ang=aim+(Math.random()-0.5)*0.7;
     particles.push({x:tipX,y:tipY,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,life:0.25,c:'#e8b24a'});}
   if(t.team==='player'){
@@ -34,8 +34,42 @@ function addSmoke(x,y){
     r:2.5+Math.random()*1.5 });
 }
 
-// ---- enemy AI (base: seek-to-engage + track/none aim). predict/mines/invisible = TODO M2/M3 ----
+// ---- enemy AI ----
 function scheduleFire(e,now){ e.nextFireAt = now + e.fireGap[0] + Math.random()*(e.fireGap[1]-e.fireGap[0]); }
+
+// is the straight segment a→b crossed by an obstacle? (sampled — cheap & good enough)
+function segBlocked(x0,y0,x1,y1){
+  const n=20;
+  for(let i=1;i<n;i++){ const t=i/n, x=x0+(x1-x0)*t, y=y0+(y1-y0)*t;
+    for(const o of obstacles) if(x>o.x&&x<o.x+o.w&&y>o.y&&y<o.y+o.h) return true; }
+  return false;
+}
+// approximate 1-bounce bank shot: mirror the target across each wall, aim at the
+// bounce point if both legs are clear. Returns an angle or null. (2-cushion is out of scope.)
+function bankAim(e,tx,ty){
+  const walls=[['x',FRAME],['x',W-FRAME],['y',FRAME],['y',H-FRAME]];
+  for(const [axis,v] of walls){
+    let mx=tx,my=ty; if(axis==='x') mx=2*v-tx; else my=2*v-ty;
+    let bx,by;
+    if(axis==='x'){ const tt=(v-e.x)/((mx-e.x)||1e-6); if(tt<=0||tt>=1) continue; bx=v; by=e.y+(my-e.y)*tt; }
+    else          { const tt=(v-e.y)/((my-e.y)||1e-6); if(tt<=0||tt>=1) continue; by=v; bx=e.x+(mx-e.x)*tt; }
+    if(bx<FRAME-1||bx>W-FRAME+1||by<FRAME-1||by>H-FRAME+1) continue;
+    if(segBlocked(e.x,e.y,bx,by)||segBlocked(bx,by,tx,ty)) continue;
+    return Math.atan2(by-e.y, bx-e.x);
+  }
+  return null;
+}
+// chosen aim angle for an enemy: 'track' = direct to player; 'predict' = lead, with a
+// bank fallback when cover blocks the lead point.
+function aimFor(e){
+  if(e.aim==='track') return Math.atan2(tank.y-e.y, tank.x-e.x);
+  // predict: iterate intercept from player velocity + shell speed (2x for stability)
+  const speed=e.shellSpeed||cfg.shell; let tx=tank.x,ty=tank.y;
+  for(let k=0;k<2;k++){ const d=Math.hypot(tx-e.x,ty-e.y), t=d/speed; tx=tank.x+tank.vx*t; ty=tank.y+tank.vy*t; }
+  if(!segBlocked(e.x,e.y,tx,ty)) return Math.atan2(ty-e.y, tx-e.x);
+  const bank=bankAim(e,tx,ty);
+  return bank!==null ? bank : Math.atan2(ty-e.y, tx-e.x);
+}
 function driveEnemy(e, now){
   const dx=tank.x-e.x, dy=tank.y-e.y, dist=Math.hypot(dx,dy)||1;
   // movement: hold a band around `engage`
@@ -53,8 +87,8 @@ function driveEnemy(e, now){
     // brown: lazy, doesn't track — occasional loose shot
     if(now>=e.nextFireAt){ fire(e, Math.random()*Math.PI*2); scheduleFire(e,now); }
   } else {
-    const toAng=Math.atan2(dy,dx);          // TODO(M2): 'predict' should lead the target
-    let td=((toAng-e.turretAngle+Math.PI)%(2*Math.PI))-Math.PI; e.turretAngle+=td*0.07;
+    const aimAng=aimFor(e);
+    let td=((aimAng-e.turretAngle+Math.PI)%(2*Math.PI))-Math.PI; e.turretAngle+=td*0.07;
     if(now>=e.nextFireAt){ fire(e, e.turretAngle); scheduleFire(e,now); }
   }
 }

@@ -90,8 +90,20 @@ function render(){
     }
     ctx.globalAlpha = 1;
   }
-  // shells
-  for(const sh of shells){ctx.beginPath();ctx.arc(sh.x,sh.y,5,0,7);ctx.fillStyle=getCSS('--shell');ctx.fill();}
+  // shells (rockets render elongated with a flame; normal shells are dots)
+  for(const sh of shells){
+    if(sh.rocket){
+      ctx.save();ctx.translate(sh.x,sh.y);ctx.rotate(Math.atan2(sh.vy,sh.vx));
+      ctx.fillStyle='#e8a23a';                                   // exhaust flame
+      ctx.beginPath();ctx.moveTo(-7,-2.5);ctx.lineTo(-14,0);ctx.lineTo(-7,2.5);ctx.closePath();ctx.fill();
+      ctx.fillStyle=getCSS('--shell');                           // body
+      ctx.fillRect(-7,-3,12,6);
+      ctx.beginPath();ctx.moveTo(5,-3);ctx.lineTo(11,0);ctx.lineTo(5,3);ctx.closePath();ctx.fill(); // nose
+      ctx.restore();
+    } else {
+      ctx.beginPath();ctx.arc(sh.x,sh.y,5,0,7);ctx.fillStyle=getCSS('--shell');ctx.fill();
+    }
+  }
   // particles
   for(const p of particles){ctx.globalAlpha=Math.max(0,p.life*3);ctx.fillStyle=p.c;
     ctx.beginPath();ctx.arc(p.x,p.y,3,0,7);ctx.fill();ctx.globalAlpha=1;}

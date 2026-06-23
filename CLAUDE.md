@@ -23,10 +23,14 @@ The repo holds **two separate builds** of the game, plus the feel baseline:
   wave 1 = Browns only, 3 HP, death→menu; level/kills/hp HUD). Landscape-first (portrait shows a
   rotate overlay + `orientation.lock` attempt).
   Settings = the same tuning panel, opened from the menu and the in-game gear.
-  **T0 enemy roster is in** (`data/types.js` `TYPES` + multi-tank combat base): `enemies[]`,
+  **T0 + M2 enemy AI is in** (`data/types.js` `TYPES` + multi-tank combat base): `enemies[]`,
   team-tagged shells, `spawnEnemy`, generic `fire(t,aim)` (player feel unchanged via `?? cfg`
-  fallback), and a base `driveEnemy` (track/none aim). `predict` aim, mines, and true invisibility
-  are data-ready but TODO (M2/M3). See `ENEMY-TYPES-SPRINT.md`.
+  fallback), `driveEnemy` with `track`/`none`/**`predict`** aim (`aimFor` leads the target;
+  `bankAim`/`segBlocked` do approximate 1-bounce bank shots around cover). **Green** sniper works;
+  **rocket shells** render elongated with a flame (shell `rocket` flag). Wave composition is a
+  `WAVES` table (procedural at 8+). **TODO (M3):** mines (Yellow/Purple/Black), true invisibility
+  (White) — both data-ready; Yellow/White held out of the wave table until then. See
+  `ENEMY-TYPES-SPRINT.md`.
   **Input/feel options** (in the ⚙ panel): floating vs **fixed stick** (centers are player-defined
   via a 2-tap calibration overlay, stored as W/H fractions), **auto-fire** (push the aim stick past
   the ring to fire on cooldown), **fire-slow** (firing brakes movement by `fireSlow` px/s for
