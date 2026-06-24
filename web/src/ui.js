@@ -68,6 +68,7 @@ const upOverlay=document.getElementById('upgrade');
 const upCards=document.getElementById('upgradeCards');
 function offerUpgrade(){
   run.phase='upgrade';
+  shake=0;                  // kill any leftover shake from the wave-ending hit (update() stops decaying it now)
   const cost=upgradeCost();
   document.getElementById('upCost').textContent='◆ '+cost+' scrap   (you have '+run.scrap+')';
   upCards.innerHTML='';

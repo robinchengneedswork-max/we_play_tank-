@@ -12,7 +12,7 @@ function stickVec(p){
 function inFireBtn(x,y){ return mode==='pubg' && Math.hypot(x-fireBtn.x,y-fireBtn.y)<fireBtn.r+6; }
 
 cv.addEventListener('pointerdown',e=>{
-  if(!started) return;
+  if(!started || e.pointerType==='mouse') return;   // mouse is handled by the desktop scheme below
   cv.setPointerCapture(e.pointerId);
   const x=e.clientX,y=e.clientY;
   if(inFireBtn(x,y)){ pointers.set(e.pointerId,{role:'fire'}); tryFire(); return; }
@@ -26,11 +26,13 @@ cv.addEventListener('pointerdown',e=>{
   pointers.set(e.pointerId,{role,bx,by,cx:x,cy:y});
 });
 cv.addEventListener('pointermove',e=>{
+  if(e.pointerType==='mouse') return;
   const p=pointers.get(e.pointerId); if(!p||p.role==='fire')return;
   p.cx=e.clientX; p.cy=e.clientY;
   if(p.role==='aim'){ const s=stickVec(p); if(s.raw>6) tank.aimTarget=s.ang; }
 });
 function endPointer(e){
+  if(e.pointerType==='mouse') return;
   const p=pointers.get(e.pointerId); if(!p)return;
   if(p.role==='aim'){
     const s=stickVec(p);
@@ -42,3 +44,29 @@ function endPointer(e){
 cv.addEventListener('pointerup',endPointer);
 cv.addEventListener('pointercancel',endPointer);
 function activePointer(role){ for(const p of pointers.values()) if(p.role===role) return p; return null; }
+
+// ---- desktop scheme: WASD/arrows drive, mouse aims the turret, click or space fires.
+// Coexists with touch — the pointer handlers above bail on mouse pointers, and these
+// only feed flags that update() reads, so nothing fires while not started / mid-menu.
+const keys=new Set();
+let mouseX=0, mouseY=0, mouseAim=false, mouseDown=false;
+
+function kbMoveDir(){            // WASD/arrows → movement angle, or null when idle
+  let dx=0, dy=0;
+  if(keys.has('KeyW')||keys.has('ArrowUp'))    dy-=1;
+  if(keys.has('KeyS')||keys.has('ArrowDown'))  dy+=1;
+  if(keys.has('KeyA')||keys.has('ArrowLeft'))  dx-=1;
+  if(keys.has('KeyD')||keys.has('ArrowRight')) dx+=1;
+  return (dx||dy) ? Math.atan2(dy,dx) : null;
+}
+function fireHeld(){ return mouseDown || keys.has('Space'); }
+
+window.addEventListener('keydown',e=>{
+  if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+  keys.add(e.code);
+});
+window.addEventListener('keyup',e=>{ keys.delete(e.code); });
+cv.addEventListener('mousemove',e=>{ mouseX=e.clientX; mouseY=e.clientY; mouseAim=true; });
+cv.addEventListener('mousedown',e=>{ if(e.button===0){ mouseDown=true; mouseX=e.clientX; mouseY=e.clientY; mouseAim=true; } });
+window.addEventListener('mouseup',e=>{ if(e.button===0) mouseDown=false; });
+cv.addEventListener('contextmenu',e=>e.preventDefault());   // no context menu on a right-click mid-fight

@@ -311,7 +311,11 @@ function update(dt){
       const baseMove = pMove();
       const moveSpeed = now<tank.fireSlowUntil ? Math.max(20, baseMove-cfg.fireSlow*run.mods.fireSlow) : baseMove;
       const mp=activePointer('move');
-      if(mp){ const s=stickVec(mp); const n=s.mag/cfg.rad;
+      const kbDir=kbMoveDir();                     // desktop: WASD/arrows drive at full speed
+      if(kbDir!==null){
+        tank.vx=Math.cos(kbDir)*moveSpeed; tank.vy=Math.sin(kbDir)*moveSpeed;
+        let d=((kbDir-tank.bodyAngle+Math.PI)%(2*Math.PI))-Math.PI; tank.bodyAngle+=d*cfg.body;
+      } else if(mp){ const s=stickVec(mp); const n=s.mag/cfg.rad;
         tank.vx=Math.cos(s.ang)*moveSpeed*n; tank.vy=Math.sin(s.ang)*moveSpeed*n;
         const target=s.ang; let d=((target-tank.bodyAngle+Math.PI)%(2*Math.PI))-Math.PI;
         tank.bodyAngle+=d*cfg.body;
@@ -325,7 +329,11 @@ function update(dt){
       trailTank(tank,dt);
       // auto-fire: hold the aim stick past the ring to keep firing on cooldown
       if(cfg.autofire){ const ap=activePointer('aim'); if(ap && stickVec(ap).raw>cfg.rad) tryFire(); }
+      if(fireHeld()) tryFire();    // desktop: hold mouse / space to fire (cooldown-gated)
     }
+    // desktop: turret tracks the mouse cursor (recomputed each frame so it stays
+    // locked while the tank drives, not just when the mouse moves).
+    if(mouseAim && !activePointer('aim')) tank.aimTarget=Math.atan2(mouseY-tank.y, mouseX-tank.x);
     // turret aim — Tank Destroyer's gun is limited to a frontal arc; when you aim
     // past it, the hull swings to follow (unless you're actively driving).
     if(tank.aimTarget!==undefined){
@@ -334,7 +342,7 @@ function update(dt){
       if(arc){
         let rel=((aim-tank.bodyAngle+Math.PI)%(2*Math.PI))-Math.PI;
         if(Math.abs(rel)>arc){
-          const steering = !inWarmup && !!activePointer('move');
+          const steering = !inWarmup && (!!activePointer('move') || kbMoveDir()!==null);
           if(!steering){                                  // swing the hull toward the target
             tank.bodyAngle += Math.sign(rel)*Math.min(Math.abs(rel)-arc, 1.8*dt);
             rel=((aim-tank.bodyAngle+Math.PI)%(2*Math.PI))-Math.PI;
@@ -361,7 +369,9 @@ function update(dt){
 
   // ---- shells ----
   for(let i=shells.length-1;i>=0;i--){
-    const sh=shells[i]; sh.life-=dt; if(sh.life<=0){shells.splice(i,1);continue;}
+    const sh=shells[i];
+    if(!sh) continue;        // a kill mid-loop (killEnemy→finishWave→beginWave) can wipe shells[]; skip the holes
+    sh.life-=dt; if(sh.life<=0){shells.splice(i,1);continue;}
     sh.arm-=dt;                                   // firer is immune only until the shell arms (no muzzle suicide)
     const steps=4, sdt=dt/steps; let dead=false;
     for(let k=0;k<steps;k++){
