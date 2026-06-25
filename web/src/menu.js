@@ -28,11 +28,13 @@ async function startMode(m, classKey){
   resetRun();               // reset run state + upgrade mods (both modes start at baseline)
   runClassKey = (m==='roguelike') ? (classKey||runClassKey||'medium') : null;
   run.class = runClassKey ? CLASSES[runClassKey] : null;     // sandbox: null = cfg baseline
-  tank.rocket = !!(run.class && run.class.rocket);
-  tank.armor = (run.class && run.class.armor) || null;   // Heavy class: directional armor (null = no armor)
-  run.maxPlates = tank.armor ? HEAVY_PLATES : 0;         // Heavy starts with plates; others earn them (Armor Plating)
-  tank.plates = run.maxPlates;
-  tank.trackBroken = false; tank.immobileUntil = 0; tank.brokenSides = {pos:false,neg:false};
+  // baked-in class slots: right = gun-mode (TD = APDS), left = defensive item (Heavy = armor).
+  // Both are swappable at the depot; turretArc (locked traverse) is a permanent characteristic.
+  run.gunMode = (run.class && run.class.bakedGun) || null;
+  clearLeftSlot();
+  if(run.class && run.class.bakedLeft) setLeftSlot(run.class.bakedLeft);
+  tank.tracks = !!(run.class && run.class.tracks);       // Heavy: breakable side tracks (baked characteristic, independent of the left slot)
+  tank.rocket = false;                                    // rockets come from the APDS gun-mode now, not the class
   resetArena();
   setHudForMode();
   updateHud();

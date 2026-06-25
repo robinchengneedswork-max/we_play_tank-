@@ -31,8 +31,12 @@ const FRAME = 18;                 // board inner margin (px)
 const HEAVY_STUN_MS = 5000;       // Heavy player: a track hit roots you this long; that side stays detracked (vulnerable) for the life
 const HEAVY_PLATES = 2;           // front plates a heavy (class or enemy) starts each life with; each deflect spends one
 const BOSS_PLATES = 4;            // a boss starts with a thicker glacis (more front deflects before it goes soft)
-// Front-only armor granted by the 'Armor Plating' rulebreaker upgrade (no track mechanic, unlike the Heavy class).
-const FRONT_ARMOR = { frontArc:Math.PI*0.30, rearArc:Math.PI*0.30, deflect:true, tracks:false };
+// Front glacis (the swappable left-slot deflect plate). Track-break is a separate class
+// characteristic (`tracks:true` on Heavy / enemy heavy), NOT part of this.
+const FRONT_ARMOR = { frontArc:Math.PI*0.30, rearArc:Math.PI*0.30, deflect:true };
+const ARMOR_SIDE_FRONT = Math.PI*0.30, ARMOR_SIDE_REAR = Math.PI*0.30;   // face arcs for track-break when no glacis is equipped
+const APDS_PIERCE    = 3;         // tanks an APDS (sabot) round punches through
+const SCATTER_PELLETS = 3;        // pellets per shot with the Scattergun gun-mode
 
 // ---- rulebreaker arsenal tunables (gun-modes, gadgets, vibranium) ----
 const LASER_RANGE   = 620;        // px total path a laser beam traces (unlimited bounces within it)
@@ -69,14 +73,16 @@ let deployBtn={x:0,y:0,r:34};     // gadget deploy trigger (left index), positio
 // stat helpers (pMove/pBounce/pMaxShells/pShell). `cfg.move` is the Light speed;
 // moveMul scales from it. turretArc=null is free 360°; a value (rad) is a frontal
 // gun arc (Tank Destroyer) — the hull swings to follow when you aim past it.
+// A class = a starting loadout: stat multipliers, baked-in slot items (bakedGun = right slot,
+// bakedLeft = left slot), and pure characteristics (turretArc = locked traverse). Slot items can be
+// swapped at the depot (you give up the class one); characteristics are permanent.
 const CLASSES = {
   light:    { key:'light',    name:'Light',          desc:'Fast · no ricochet · 2 shells',
-              moveMul:1.0,  shellMul:1.0,  bounce:0, maxShells:2, rocket:false, turretArc:null },
+              moveMul:1.0,  shellMul:1.0,  bounce:0, maxShells:2, turretArc:null },
   medium:   { key:'medium',   name:'Medium',         desc:'Balanced · 2 ricochet · 3 shells',
-              moveMul:0.75, shellMul:1.0,  bounce:2, maxShells:3, rocket:false, turretArc:null },
-  destroyer:{ key:'destroyer',name:'Tank Destroyer', desc:'Slow · rocket gun · 2 ricochet · frontal gun',
-              moveMul:0.65, shellMul:1.25, bounce:2, maxShells:2, rocket:true,  turretArc:Math.PI*35/180 },
-  heavy:    { key:'heavy',    name:'Heavy',          desc:'Slow · front deflects shots · tracks can be blown',
-              moveMul:0.6,  shellMul:1.0,  bounce:1, maxShells:2, rocket:false, turretArc:null,
-              armor:{ frontArc:Math.PI*0.30, rearArc:Math.PI*0.30, deflect:true, tracks:true } },
+              moveMul:0.75, shellMul:1.0,  bounce:2, maxShells:3, turretArc:null },
+  destroyer:{ key:'destroyer',name:'Tank Destroyer', desc:'Slow · APDS piercing gun · locked frontal traverse',
+              moveMul:0.65, shellMul:1.25, bounce:2, maxShells:2, turretArc:Math.PI*35/180, bakedGun:'apds' },
+  heavy:    { key:'heavy',    name:'Heavy',          desc:'Slow · breakable side tracks · starts with a front glacis',
+              moveMul:0.6,  shellMul:1.0,  bounce:1, maxShells:2, turretArc:null, bakedLeft:'glacis', tracks:true },
 };

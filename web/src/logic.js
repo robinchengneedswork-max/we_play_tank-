@@ -151,7 +151,7 @@ function updateVibranium(){
 }
 
 // Raw muzzle: spawn one shell from `t` along `aim` (no cooldown/capacity gate) + a
-// muzzle-spark puff. Player shells carry the Piercing Rounds count (run.mods.pierce).
+// muzzle-spark puff. The right-slot gun-mode shapes the player's shell (APDS pierce, bounce-rocket).
 const SPREAD_ARC=0.13;   // rad between Scattergun pellets
 function emitShell(t, aim){
   const isP=(t===tank);
@@ -159,8 +159,10 @@ function emitShell(t, aim){
   const bounce = isP? pBounce() : (t.bounce    ?? cfg.bounce);
   const tipX=t.x+Math.cos(aim)*(t.r+10), tipY=t.y+Math.sin(aim)*(t.r+10);
   const sh={x:tipX,y:tipY,vx:Math.cos(aim)*speed,vy:Math.sin(aim)*speed,b:bounce,life:3.2,arm:0.16,team:t.team,owner:t,rocket:!!t.rocket};
-  if(isP && run.mods.pierce>0){ sh.pierce=run.mods.pierce; sh.hitSet=new Set(); }   // punch-through bookkeeping
-  if(isP && run.mods.bounceRocket>0) sh.bounceRocket=1;                              // converts to a homing rocket on its first bounce
+  if(isP){   // right-slot gun-mode shapes the player's shell
+    if(run.gunMode==='apds'){ sh.pierce=APDS_PIERCE; sh.hitSet=new Set(); sh.rocket=true; sh.b=0; }   // sabot: fast, straight, punches through
+    else if(run.gunMode==='bounceRocket') sh.bounceRocket=1;                                           // converts to a homing rocket on its first bounce
+  }
   shells.push(sh);
   for(let i=0;i<6;i++){const sp=60+Math.random()*120,ang=aim+(Math.random()-0.5)*0.7;
     particles.push({x:tipX,y:tipY,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,life:0.25,c:'#e8b24a'});}
@@ -177,7 +179,7 @@ function fire(t, aim){
   let own=0; for(const s of shells) if(s.owner===t) own++;
   if(own>=maxShells) return false;
   t.lastFire=now;
-  const pellets = isP ? 1+2*run.mods.spread : 1;   // Scattergun: 1→3→5 pellets
+  const pellets = (isP && run.gunMode==='scatter') ? SCATTER_PELLETS : 1;   // Scattergun gun-mode
   if(pellets>1){ for(let i=0;i<pellets;i++) emitShell(t, aim + (i-(pellets-1)/2)*SPREAD_ARC); }
   else emitShell(t, aim);
   SFX.shoot(isP);
@@ -711,7 +713,7 @@ function update(dt){
       if(!victim){ for(const e of enemies){ if(e.spawning || (sh.owner===e && sh.arm>0) || (sh.hitSet && sh.hitSet.has(e))) continue;
         if(Math.hypot(sh.x-e.x,sh.y-e.y)<e.r+4){ victim=e; break; } } }
       if(victim){
-        const act = victim.armor ? resolveHit(victim, sh) : 'damage';   // armored (heavy enemy OR Heavy player) reads the face
+        const act = (victim.armor || victim.tracks) ? resolveHit(victim, sh) : 'damage';   // glacis and/or breakable tracks read the struck face
         if(act==='deflect'){
           // bounce the shell off the glacis plate (reflect about the hull normal, like a wall)
           const nx=sh.x-victim.x, ny=sh.y-victim.y, nl=Math.hypot(nx,ny)||1, ux=nx/nl, uy=ny/nl;
@@ -801,12 +803,13 @@ function burst(x,y,color,n){
 // Returns 'deflect' (front bounces a non-rocket back), 'absorb' (track break — no hp,
 // immobilize), or 'damage'. Unarmored tanks (incl. the player) always take 'damage'.
 function resolveHit(victim, sh){
-  const a=victim.armor; if(!a) return 'damage';
+  const a=victim.armor;                                        // front glacis (left-slot item; may be null)
+  const fa = a ? a.frontArc : ARMOR_SIDE_FRONT, ra = a ? a.rearArc : ARMOR_SIDE_REAR;
   const rel=((Math.atan2(sh.y-victim.y, sh.x-victim.x) - victim.bodyAngle + Math.PI)%(2*Math.PI))-Math.PI;  // signed
   const ab=Math.abs(rel);
-  if(ab <= a.frontArc) return (a.deflect && !sh.rocket && victim.plates>0) ? 'deflect' : 'damage';   // glacis turns a normal shell while plates last; rockets punch through
-  if(ab >= Math.PI - a.rearArc) return 'damage';               // rear is always soft
-  if(!a.tracks) return 'damage';
+  if(ab <= fa) return (a && a.deflect && !sh.rocket && victim.plates>0) ? 'deflect' : 'damage';   // glacis turns a normal shell while plates last; rockets punch through
+  if(ab >= Math.PI - ra) return 'damage';                      // rear is always soft
+  if(!victim.tracks) return 'damage';                          // no breakable-tracks characteristic → side just damages
   // side hit. Player tracks break PER-SIDE (each side stays vulnerable once detracked);
   // the enemy heavy uses a single global break. `hitSide` is read by the absorb branch.
   victim.hitSide = rel>=0 ? 'pos' : 'neg';

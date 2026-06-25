@@ -5,7 +5,7 @@ const tank={x:0,y:0,r:17,bodyAngle:0,turretAngle:-Math.PI/2,vx:0,vy:0,
             team:'player',hp:3,maxHp:3,lastFire:0,fireSlowUntil:0,
             armor:null,trackBroken:false,immobileUntil:0,plates:0,
             brokenSides:{pos:false,neg:false},      // Heavy class: directional armor, front plates, timed root, per-side detrack
-            flying:0,cloak:0,charged:false,iframes:0}; // jump-jets airborne-until · stealth-since · vibranium charged · dash i-frames-until
+            flying:0,cloak:0,charged:false,iframes:0,tracks:false}; // jump-jets · stealth · vibranium · dash i-frames · tracks=Heavy breakable-track characteristic
 let blockRects=[];       // solid obstacle rects (pixel space); baked from the map by projectMap()
 let holeRects=[];        // pits (+ water, tagged): block movement, but shells fly over + LOS clear (M1)
 let crates=[];           // destructible cover {x,y,w,h,hp,max,crate} — bounce+block until broken (M3)
@@ -29,14 +29,14 @@ let shake=0;
 const run={ level:1, kills:0, hp:3, maxHp:3, phase:'fighting', timer:0, mods:freshMods(), siege:null,
             scrap:0, class:null, maxPlates:0, waveKind:'normal',
             buys:{}, weight:0, engine:0, shopRb:[],   // FTL depot: per-line buy counts, weight vs engine, this shop's rulebreaker roll
-            gunMode:null, gadget:null, gadgetCharges:0, gadgetMaxCharges:0, gadgetCdUntil:0, vibranium:false };  // arsenal slots
-function freshMods(){ return {move:1, turret:1, cd:1, shell:1, maxShells:0, bounce:0, fireSlow:1, pierce:0, spread:0, bounceRocket:0}; }
+            gunMode:null, leftSlotId:null, gadget:null, gadgetCharges:0, gadgetMaxCharges:0, gadgetCdUntil:0, vibranium:false };  // two equip slots: right=gunMode, left=leftSlotId
+function freshMods(){ return {move:1, turret:1, cd:1, shell:1, maxShells:0, bounce:0, fireSlow:1}; }
 function resetRun(){
   run.level=1; run.kills=0; run.maxHp=3; run.hp=run.maxHp;
   run.phase='fighting'; run.timer=0; run.mods=freshMods(); run.siege=null;
   run.scrap=0; run.maxPlates=0; run.waveKind='normal';
   run.buys={}; run.weight=0; run.engine=0; run.shopRb=[];
-  run.gunMode=null; run.gadget=null; run.gadgetCharges=0; run.gadgetMaxCharges=0; run.gadgetCdUntil=0; run.vibranium=false;
+  run.gunMode=null; clearLeftSlot();
   // run.class is set by startMode after resetRun (sandbox leaves it null = cfg baseline)
 }
 const INTERMISSION_MS=2600;   // breather + countdown before a wave goes live
@@ -85,6 +85,23 @@ function equipGadget(g){
   run.gadgetCharges = run.gadgetMaxCharges;
   run.gadgetCdUntil = 0;
 }
+// The LEFT slot holds exactly one of: a gadget, or a defensive passive (vibranium / glacis / heavy
+// armor). Equipping any clears the others. `tank.armor`/`run.vibranium`/`run.gadget` are the live
+// effect flags read by combat code; `run.leftSlotId` is what's shown + what the class bakes in.
+function clearLeftSlot(){
+  run.leftSlotId=null;
+  run.gadget=null; run.gadgetCharges=0; run.gadgetMaxCharges=0; run.gadgetCdUntil=0;
+  run.vibranium=false;
+  tank.armor=null; run.maxPlates=0; tank.plates=0;
+  tank.trackBroken=false; tank.immobileUntil=0; tank.brokenSides={pos:false,neg:false};
+}
+function setLeftSlot(id){
+  clearLeftSlot();
+  run.leftSlotId=id;
+  if(id==='vibranium')   run.vibranium=true;
+  else if(id==='glacis'){ tank.armor=FRONT_ARMOR; run.maxPlates=HEAVY_PLATES; tank.plates=run.maxPlates; }
+  else if(GADGETS[id])    equipGadget(GADGETS[id]);
+}
 
 // Upgrade pool offered between waves. apply() mutates run.mods (or HP).
 // tier: 'common' (small stat bumps) | 'rare' (structural) | 'rulebreaker' (new mechanic).
@@ -98,38 +115,38 @@ const UPGRADES=[
   {name:'Magazine',    tier:'rare',   desc:'+1 shell on screen', apply(){ run.mods.maxShells+=1; }},
   {name:'Ricochet',    tier:'rare',   desc:'+1 ricochet',        apply(){ run.mods.bounce+=1; }},
   {name:'Plating',     tier:'rare',   desc:'+1 max HP & heal',   apply(){ run.maxHp+=1; run.hp=run.maxHp; tank.maxHp=run.maxHp; tank.hp=run.maxHp; }},
-  {name:'Armor Plating', tier:'rulebreaker', rulebreaker:true, desc:'Front deflects shots · +2 plates',
-    apply(){ if(!tank.armor) tank.armor=FRONT_ARMOR; run.maxPlates+=HEAVY_PLATES; tank.plates=run.maxPlates; }},
-  {name:'Piercing Rounds', tier:'rulebreaker', rulebreaker:true, desc:'Shells punch through +1 tank',
-    apply(){ run.mods.pierce+=1; }},
-  {name:'Scattergun', tier:'rulebreaker', rulebreaker:true, desc:'Fire a wider shell spread (+2 pellets)',
-    apply(){ run.mods.spread+=1; }},
-  // gun-modes (replace the main gun) + the passive bounce-rocket shell mod
-  {name:'Laser', tier:'rulebreaker', rulebreaker:true, desc:'Gun → hitscan laser · bounces · slower',
+  // ---- RIGHT slot: gun-modes (mutually exclusive; replaces your current gun behaviour) ----
+  {name:'APDS Rounds', tier:'rulebreaker', rulebreaker:true, slot:'gun', desc:'Right slot: sabot rounds punch through tanks',
+    apply(){ run.gunMode='apds'; }},
+  {name:'Scattergun', tier:'rulebreaker', rulebreaker:true, slot:'gun', desc:'Right slot: fire a 3-shell spread',
+    apply(){ run.gunMode='scatter'; }},
+  {name:'Laser', tier:'rulebreaker', rulebreaker:true, slot:'gun', desc:'Right slot: hitscan laser · bounces · slower',
     apply(){ run.gunMode='laser'; }},
-  {name:'Wire-Guided Missiles', tier:'rulebreaker', rulebreaker:true, desc:'Gun → steer the missile (hold aim)',
+  {name:'Wire-Guided Missiles', tier:'rulebreaker', rulebreaker:true, slot:'gun', desc:'Right slot: steer the missile (hold aim)',
     apply(){ run.gunMode='wireGuided'; }},
-  {name:'Bounce Rockets', tier:'rulebreaker', rulebreaker:true, desc:'A bounced shell locks on & rockets in',
-    apply(){ run.mods.bounceRocket=1; }},
-  {name:'Vibranium Plate', tier:'rulebreaker', rulebreaker:true, desc:'Survive a hit → charge & ram (vulnerable till you do)',
-    apply(){ run.vibranium=true; }},
-  // gadgets (the active-ability slot; equipping fills its charges)
-  {name:'Rocket Sentry', tier:'rulebreaker', rulebreaker:true, desc:'Gadget: deploy an immobile rocket turret',
-    apply(){ equipGadget(GADGETS.sentryTeal); }},
-  {name:'Gun Sentry', tier:'rulebreaker', rulebreaker:true, desc:'Gadget: deploy an immobile gun turret',
-    apply(){ equipGadget(GADGETS.sentryGrey); }},
-  {name:'Trophy System', tier:'rulebreaker', rulebreaker:true, desc:'Gadget: a turret that zaps incoming shells',
-    apply(){ equipGadget(GADGETS.trophy); }},
-  {name:'One-way Shield', tier:'rulebreaker', rulebreaker:true, desc:'Gadget: a frontal shell-stopping arc',
-    apply(){ equipGadget(GADGETS.shield); }},
-  {name:'Spider Mines', tier:'rulebreaker', rulebreaker:true, desc:'Gadget: mines that crawl at enemies',
-    apply(){ equipGadget(GADGETS.spiderMines); }},
-  {name:'Dash', tier:'rulebreaker', rulebreaker:true, desc:'Gadget: blink a short distance (i-frames)',
-    apply(){ equipGadget(GADGETS.dash); }},
-  {name:'Jump Jets', tier:'rulebreaker', rulebreaker:true, desc:'Gadget: fly 3s — no hits, cross terrain',
-    apply(){ equipGadget(GADGETS.jumpJets); }},
-  {name:'Stealth', tier:'rulebreaker', rulebreaker:true, desc:'Gadget: vanish from enemies until you fire',
-    apply(){ equipGadget(GADGETS.stealth); }},
+  {name:'Bounce Rockets', tier:'rulebreaker', rulebreaker:true, slot:'gun', desc:'Right slot: a bounced shell locks on & rockets in',
+    apply(){ run.gunMode='bounceRocket'; }},
+  // ---- LEFT slot: one defensive passive OR one active gadget (mutually exclusive) ----
+  {name:'Front Glacis', tier:'rulebreaker', rulebreaker:true, slot:'left', desc:'Left slot: front deflects shots · 2 plates',
+    apply(){ setLeftSlot('glacis'); }},
+  {name:'Vibranium Plate', tier:'rulebreaker', rulebreaker:true, slot:'left', desc:'Left slot: survive a hit → charge & ram',
+    apply(){ setLeftSlot('vibranium'); }},
+  {name:'Rocket Sentry', tier:'rulebreaker', rulebreaker:true, slot:'left', desc:'Left gadget: an immobile rocket turret',
+    apply(){ setLeftSlot('sentryTeal'); }},
+  {name:'Gun Sentry', tier:'rulebreaker', rulebreaker:true, slot:'left', desc:'Left gadget: an immobile gun turret',
+    apply(){ setLeftSlot('sentryGrey'); }},
+  {name:'Trophy System', tier:'rulebreaker', rulebreaker:true, slot:'left', desc:'Left gadget: a turret that zaps incoming shells',
+    apply(){ setLeftSlot('trophy'); }},
+  {name:'One-way Shield', tier:'rulebreaker', rulebreaker:true, slot:'left', desc:'Left gadget: a frontal shell-stopping arc',
+    apply(){ setLeftSlot('shield'); }},
+  {name:'Spider Mines', tier:'rulebreaker', rulebreaker:true, slot:'left', desc:'Left gadget: mines that crawl at enemies',
+    apply(){ setLeftSlot('spiderMines'); }},
+  {name:'Dash', tier:'rulebreaker', rulebreaker:true, slot:'left', desc:'Left gadget: blink a short distance (i-frames)',
+    apply(){ setLeftSlot('dash'); }},
+  {name:'Jump Jets', tier:'rulebreaker', rulebreaker:true, slot:'left', desc:'Left gadget: fly 3s — no hits, cross terrain',
+    apply(){ setLeftSlot('jumpJets'); }},
+  {name:'Stealth', tier:'rulebreaker', rulebreaker:true, slot:'left', desc:'Left gadget: vanish from enemies until you fire',
+    apply(){ setLeftSlot('stealth'); }},
 ];
 // Tier-weighted offer (no dupes). Rares/rulebreakers are scarce early and grow likelier
 // deeper into a run. `tierFilter` restricts the pool (boss reward = rulebreakers only).
@@ -159,7 +176,7 @@ function spawnEnemy(typeName, x, y){
     x, y, r:t.r, vx:0, vy:0,
     bodyAngle:Math.random()*Math.PI*2, turretAngle:Math.random()*Math.PI*2, aimTarget:0,
     hp:t.hp, maxHp:t.hp, boss:!!t.boss,
-    armor:t.armor||null, trackBroken:false, immobileUntil:0, plates:t.boss?BOSS_PLATES:(t.armor?HEAVY_PLATES:0),   // heavy/boss: directional armor + front plates + track break
+    armor:t.armor||null, tracks:!!(t.armor&&t.armor.tracks), trackBroken:false, immobileUntil:0, plates:t.boss?BOSS_PLATES:(t.armor?HEAVY_PLATES:0),   // heavy/boss: front glacis + plates; tracks = breakable side tracks
     // per-tank combat stats (fire() reads these; players have none → cfg fallback)
     speed:t.speed, shellSpeed:t.shellSpeed, bounce:t.bounce, cd:t.cd, maxShells:t.maxShells,
     rocket:t.rocket, aim:t.aim, engage:t.engage, mines:t.mines, invisible:t.invisible,

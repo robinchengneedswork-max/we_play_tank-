@@ -58,11 +58,14 @@ calib.addEventListener('pointerdown',e=>{
 // ---- HUD stat pills (sandbox: hits · roguelike: level/kills) ----
 const elHits=document.getElementById('statHits');
 const elRun=document.getElementById('statRun');
+const GUN_GLYPH={ laser:'⚡', wireGuided:'➹', scatter:'⁂', bounceRocket:'⤵', apds:'⊳' };
 function updateHud(){
   elHits.textContent='Hits '+score;
   let s='Lv '+run.level+' · '+'♥'.repeat(Math.max(0,run.hp))+' · ◆'+run.scrap;
-  if(run.gunMode) s+=' · '+(run.gunMode==='laser'?'⚡':'➹');          // equipped gun-mode
-  if(run.gadget)  s+=' · ⚙'+run.gadgetCharges+'/'+run.gadgetMaxCharges; // gadget charges
+  if(run.gunMode) s+=' · '+(GUN_GLYPH[run.gunMode]||'◗');               // right slot (gun-mode)
+  if(run.gadget)       s+=' · ⚙'+run.gadgetCharges+'/'+run.gadgetMaxCharges; // left slot: gadget charges
+  else if(run.vibranium) s+=' · ⚡V';                                    // left slot: vibranium
+  else if(tank.armor)    s+=' · 🛡';                                     // left slot: front glacis
   elRun.textContent=s;
 }
 
