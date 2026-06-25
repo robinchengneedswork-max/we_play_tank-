@@ -3,8 +3,8 @@
 
 const tank={x:0,y:0,r:17,bodyAngle:0,turretAngle:-Math.PI/2,vx:0,vy:0,
             team:'player',hp:3,maxHp:3,lastFire:0,fireSlowUntil:0,
-            armor:null,trackBroken:false,immobileUntil:0,
-            brokenSides:{pos:false,neg:false}};   // Heavy class: directional armor, timed root, per-side detrack
+            armor:null,trackBroken:false,immobileUntil:0,plates:0,
+            brokenSides:{pos:false,neg:false}};   // Heavy class: directional armor, front plates, timed root, per-side detrack
 let blockRects=[];       // solid obstacle rects (pixel space); baked from the map by projectMap()
 let holeRects=[];        // pits (+ water, tagged): block movement, but shells fly over + LOS clear (M1)
 let crates=[];           // destructible cover {x,y,w,h,hp,max,crate} — bounce+block until broken (M3)
@@ -21,12 +21,12 @@ let shake=0;
 
 // Roguelike run state. `mods` are the player's run upgrades, layered over cfg
 // as multipliers/adders (so cfg stays the live-tunable baseline; sandbox = baseline).
-const run={ level:1, kills:0, hp:3, maxHp:3, phase:'fighting', timer:0, mods:freshMods(), siege:null, scrap:0, upgradesTaken:0, class:null };
+const run={ level:1, kills:0, hp:3, maxHp:3, phase:'fighting', timer:0, mods:freshMods(), siege:null, scrap:0, upgradesTaken:0, class:null, maxPlates:0 };
 function freshMods(){ return {move:1, turret:1, cd:1, shell:1, maxShells:0, bounce:0, fireSlow:1}; }
 function resetRun(){
   run.level=1; run.kills=0; run.maxHp=3; run.hp=run.maxHp;
   run.phase='fighting'; run.timer=0; run.mods=freshMods(); run.siege=null;
-  run.scrap=0; run.upgradesTaken=0;
+  run.scrap=0; run.upgradesTaken=0; run.maxPlates=0;
   // run.class is set by startMode after resetRun (sandbox leaves it null = cfg baseline)
 }
 const INTERMISSION_MS=2600;   // breather + countdown before a wave goes live
@@ -49,6 +49,8 @@ const UPGRADES=[
   {name:'Ricochet',    desc:'+1 ricochet',        apply(){ run.mods.bounce+=1; }},
   {name:'Plating',     desc:'+1 max HP & heal',   apply(){ run.maxHp+=1; run.hp=run.maxHp; tank.maxHp=run.maxHp; tank.hp=run.maxHp; }},
   {name:'Recoil damp', desc:'-50% fire slow',     apply(){ run.mods.fireSlow*=0.5; }},
+  {name:'Armor Plating', desc:'Front deflects shots · +2 plates', rulebreaker:true,
+    apply(){ if(!tank.armor) tank.armor=FRONT_ARMOR; run.maxPlates+=HEAVY_PLATES; tank.plates=run.maxPlates; }},
 ];
 function pickUpgrades(n){
   const pool=[...UPGRADES], out=[];
@@ -66,7 +68,7 @@ function spawnEnemy(typeName, x, y){
     x, y, r:t.r, vx:0, vy:0,
     bodyAngle:Math.random()*Math.PI*2, turretAngle:Math.random()*Math.PI*2, aimTarget:0,
     hp:t.hp, maxHp:t.hp,
-    armor:t.armor||null, trackBroken:false, immobileUntil:0,   // heavy: directional armor + track break
+    armor:t.armor||null, trackBroken:false, immobileUntil:0, plates:t.armor?HEAVY_PLATES:0,   // heavy: directional armor + front plates + track break
     // per-tank combat stats (fire() reads these; players have none → cfg fallback)
     speed:t.speed, shellSpeed:t.shellSpeed, bounce:t.bounce, cd:t.cd, maxShells:t.maxShells,
     rocket:t.rocket, aim:t.aim, engage:t.engage, mines:t.mines, invisible:t.invisible,
@@ -213,6 +215,7 @@ function resetPlayerToSpawn(){
   tank.lastFire=0; tank.fireSlowUntil=0;
   tank.trackBroken=false; tank.immobileUntil=0;    // tracks repaired on (re)spawn
   tank.brokenSides={pos:false,neg:false};
+  tank.plates=run.maxPlates||0;                    // front plates refill each life
 }
 
 // Reset the arena for a fresh start of either mode.

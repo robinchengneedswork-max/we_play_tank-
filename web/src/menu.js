@@ -30,6 +30,8 @@ async function startMode(m, classKey){
   run.class = runClassKey ? CLASSES[runClassKey] : null;     // sandbox: null = cfg baseline
   tank.rocket = !!(run.class && run.class.rocket);
   tank.armor = (run.class && run.class.armor) || null;   // Heavy class: directional armor (null = no armor)
+  run.maxPlates = tank.armor ? HEAVY_PLATES : 0;         // Heavy starts with plates; others earn them (Armor Plating)
+  tank.plates = run.maxPlates;
   tank.trackBroken = false; tank.immobileUntil = 0; tank.brokenSides = {pos:false,neg:false};
   resetArena();
   setHudForMode();

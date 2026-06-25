@@ -47,7 +47,7 @@ function drawTank(t,col,colDark){
   ctx.fillStyle=(rooted||(bs&&bs.neg))?RED:colDark; ctx.fillRect(-t.r-2,-t.r+1,t.r*2+4,5);  // top = neg side
   ctx.fillStyle=(rooted||(bs&&bs.pos))?RED:colDark; ctx.fillRect(-t.r-2,t.r-6,t.r*2+4,5);    // bottom = pos side
   ctx.fillStyle=col;ctx.fillRect(-t.r,-t.r+3,t.r*2,t.r*2-6);
-  if(t.armor){ ctx.fillStyle=colDark;ctx.fillRect(t.r-4,-t.r+1,6,t.r*2-2); }  // front glacis plate
+  if(t.armor && t.plates>0){ ctx.fillStyle=colDark;ctx.fillRect(t.r-4,-t.r+1,6,t.r*2-2); }  // front glacis (gone once plates spent → front is soft)
   ctx.restore();
   // turret
   ctx.rotate(t.turretAngle);

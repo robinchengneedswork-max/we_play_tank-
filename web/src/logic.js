@@ -422,6 +422,7 @@ function update(dt){
           const dot=sh.vx*ux+sh.vy*uy; sh.vx-=2*dot*ux; sh.vy-=2*dot*uy;
           sh.x=victim.x+ux*(victim.r+6); sh.y=victim.y+uy*(victim.r+6);   // nudge clear so it doesn't re-hit
           sh.b--; if(sh.owner===tank) SFX.ricochet();
+          victim.plates--;                            // spent a front plate (front goes soft at 0)
           burst(sh.x,sh.y,'#cfd3d8',6);
           if(sh.b<0) dead=true;                       // spent its bounces → fizzle; else it flies on (maybe back at you)
           break;
@@ -479,7 +480,7 @@ function resolveHit(victim, sh){
   const a=victim.armor; if(!a) return 'damage';
   const rel=((Math.atan2(sh.y-victim.y, sh.x-victim.x) - victim.bodyAngle + Math.PI)%(2*Math.PI))-Math.PI;  // signed
   const ab=Math.abs(rel);
-  if(ab <= a.frontArc) return (a.deflect && !sh.rocket) ? 'deflect' : 'damage';   // glacis turns a normal shell; rockets punch through
+  if(ab <= a.frontArc) return (a.deflect && !sh.rocket && victim.plates>0) ? 'deflect' : 'damage';   // glacis turns a normal shell while plates last; rockets punch through
   if(ab >= Math.PI - a.rearArc) return 'damage';               // rear is always soft
   if(!a.tracks) return 'damage';
   // side hit. Player tracks break PER-SIDE (each side stays vulnerable once detracked);

@@ -28,7 +28,10 @@ function loadPrefs(){ try{ const s=localStorage.getItem('tankPrefs'); if(!s) ret
 loadPrefs();
 
 const FRAME = 18;                 // board inner margin (px)
-const HEAVY_STUN_MS = 10000;      // Heavy player: a track hit roots you this long; that side stays detracked (vulnerable) for the life
+const HEAVY_STUN_MS = 5000;       // Heavy player: a track hit roots you this long; that side stays detracked (vulnerable) for the life
+const HEAVY_PLATES = 2;           // front plates a heavy (class or enemy) starts each life with; each deflect spends one
+// Front-only armor granted by the 'Armor Plating' rulebreaker upgrade (no track mechanic, unlike the Heavy class).
+const FRONT_ARMOR = { frontArc:Math.PI*0.30, rearArc:Math.PI*0.30, deflect:true, tracks:false };
 
 let W=0, H=0, DPR=1;             // canvas size, set in main.resize()
 let mode='brawl';                 // 'brawl' | 'pubg'  (right-stick fire model)
