@@ -12,14 +12,15 @@ const CRATE_HP = 2;              // shots a crate takes before it breaks (M3)
 // 'e' cells mark the edge(s) reinforcements pour in from (so maps can be linear).
 
 // Map library (M2). Each map: name, spawn style ('warp' default | 'siege'), and a
-// 16×9 ASCII grid. TACTICAL but trap-SAFE: enemies have only local whisker
-// avoidance, no pathfinding (see MAPS-SPRINT caveat + steerDir in logic.js), so
-// cover is built from SHORT segments + holes, never long walls or concave pockets.
-// Rules baked in: gaps stay >=2 cells (one tank-width is ~1 cell), every room has
-// >=2 exits, and HOLES ('O') do the heavy lifting — they split MOVEMENT into rooms
-// but never block line-of-sight or the AI's aim, so the bots never wedge or go
-// blind. 'siege' maps stay open on the flanks/edges so off-screen tanks drive in
-// and weave the staggered cover instead of piling on a wall.
+// 16×9 ASCII grid. TACTICAL — cut-off geometry (U's, chokepoints, one-gap walls) is
+// WANTED: isolating fights is part of the combat puzzle, and a tank that can't reach
+// the player now IDLE-WANDERS instead of stacking in a corner (see _stuckMs / idle
+// wander in logic.js), so concave pockets and long walls are fair game. Still: keep
+// the player's spawn reachable and don't fully seal a room the player must escape.
+// HOLES ('O') stay the most elegant divider — they split MOVEMENT but never block
+// line-of-sight or the AI's aim, so bots behind one still shoot back. Gaps a tank
+// passes through want >=2 cells (one tank-width is ~1 cell). 'siege' maps keep their
+// edge approaches open so off-screen reinforcements can drive in.
 const MAPS=[
   // Two soft rooms split by a broken central spine; cross at the middle, bank off
   // the spine, peek-shoot over the centre holes.
@@ -245,6 +246,31 @@ const MAPS=[
     ".....#....#.....",
     ".....#....#.....",
     "................",
+  ]},
+  // ---- "PICK YOUR FIGHTS" — bolder cut-off geometry, now that stuck tanks idle-wander
+  // instead of corner-stacking. Enemies that can't reach you mill on the far side; you
+  // choose when to round the wall and take them one lane at a time. ----
+  { name:'Horseshoe', spawn:'warp', grid:[       // a C-redoubt open to the player's side; enemies must come around the ends
+    "................",
+    ".....######.....",
+    ".........##.....",
+    ".........##.....",
+    "..S......##..e..",
+    ".........##.....",
+    ".........##.....",
+    ".....######.....",
+    "................",
+  ]},
+  { name:'Pinch', spawn:'warp', grid:[           // two arenas, one central chokepoint — funnel them through one at a time
+    ".......##.......",
+    ".......##.......",
+    ".......##.......",
+    "................",
+    "..S.........e...",
+    "................",
+    ".......##.......",
+    ".......##.......",
+    ".......##.......",
   ]},
 ];
 

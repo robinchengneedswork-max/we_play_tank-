@@ -71,13 +71,23 @@ function wouldFriendlyFire(e, aim){
     travel+=Math.hypot(sim.x-px, sim.y-py); elapsed+=STEP;
     if(r.hit && --b<0) break;                           // ran out of bounces
     // never volunteer a shot that loops back through yourself (only once it's armed)
-    if(elapsed>0.16 && Math.hypot(sim.x-e.x, sim.y-e.y)<e.r+5) return true;
-    // an ally closer than the player blocks the lane → spare it; one behind is bait
+    if(elapsed>0.16 && Math.hypot(sim.x-e.x, sim.y-e.y)<e.r+6) return true;
+    // check each ally at the spot it'll occupy WHEN THE SHELL ARRIVES (lead it by its
+    // current velocity) — the old static snapshot let fast rushers spray squadmates that
+    // were a frame from crossing the lane. Margin widened slightly for the same reason.
     for(const o of enemies){ if(o===e || o.spawning) continue;
-      if(travel<distToPlayer+24 && Math.hypot(sim.x-o.x, sim.y-o.y)<o.r+5) return true; }
+      const ax=o.x+(o.vx||0)*elapsed, ay=o.y+(o.vy||0)*elapsed;
+      if(Math.hypot(sim.x-ax, sim.y-ay) < o.r+10){
+        // normally an ally BEHIND the player is fair bait (juke a shot into them), but in
+        // a tight swirl "behind" flips every frame — so don't bait when the ally is close.
+        const allyDist=Math.hypot(o.x-e.x, o.y-e.y);
+        if(travel < distToPlayer+40 || allyDist < 140) return true;
+      }
+    }
   }
   return false;
 }
+const STUCK_MS=600;   // ms a tank can be wall/corner-jammed before it switches to idle wander
 
 // is the straight segment a→b crossed by an obstacle? (sampled — cheap & good enough)
 function segBlocked(x0,y0,x1,y1){
@@ -162,11 +172,22 @@ function driveEnemy(e, now){
   // movement: hold a band around `engage`, steering around cover to reach it
   if(now < (e.immobileUntil||0)){ e.vx=0; e.vy=0; }   // track-broken: dead in the water, but turret still hunts
   else if(e.speed>0){
-    let dir=null;
-    if(dist>e.engage+20)      dir=Math.atan2(dy,dx);     // approach
-    else if(dist<e.engage-20) dir=Math.atan2(-dy,-dx);   // back off
-    if(dir!==null){ dir=steerDir(e,dir); e.vx=Math.cos(dir)*e.speed; e.vy=Math.sin(dir)*e.speed; }
-    else { e.vx*=0.85; e.vy*=0.85; }
+    // cut off behind a wall / boxed in a corner → amble a clear heading instead of
+    // grinding into cover and stacking with the rest. Turret keeps hunting (see below),
+    // so a wandering tank is still a threat the moment it gets a sightline.
+    if((e._stuckMs||0) > STUCK_MS && now >= (e.idleUntil||0)){
+      e.idleUntil = now + 800 + Math.random()*1000; e.idleHeading = pickClearHeading(e); e._stuckMs=0;
+    }
+    if(now < (e.idleUntil||0)){
+      if(!pathClear(e.x,e.y,e.idleHeading,e.r+34,e.r-2)) e.idleHeading=pickClearHeading(e);
+      const sp=e.speed*0.55; e.vx=Math.cos(e.idleHeading)*sp; e.vy=Math.sin(e.idleHeading)*sp;
+    } else {
+      let dir=null;
+      if(dist>e.engage+20)      dir=Math.atan2(dy,dx);     // approach
+      else if(dist<e.engage-20) dir=Math.atan2(-dy,-dx);   // back off
+      if(dir!==null){ dir=steerDir(e,dir); e.vx=Math.cos(dir)*e.speed; e.vy=Math.sin(dir)*e.speed; }
+      else { e.vx*=0.85; e.vy*=0.85; }
+    }
     if(Math.abs(e.vx)+Math.abs(e.vy)>1){
       const md=Math.atan2(e.vy,e.vx); let bd=((md-e.bodyAngle+Math.PI)%(2*Math.PI))-Math.PI; e.bodyAngle+=bd*0.1;
     }
@@ -224,6 +245,14 @@ function steerDir(e,want){
   for(const o of offs) if(pathClear(e.x,e.y,want+o,L,pad)){ e.steerSide=o>=0?1:-1; return want+o; }
   return want;
 }
+// Pick a heading whose short look-ahead is clear, for idle/unstuck wandering. Sampled
+// from a RANDOM base around the circle so a clump of cut-off tanks scatters different
+// ways instead of all shoving the same corner. Falls back to the base if fully boxed in.
+function pickClearHeading(e){
+  const base=Math.random()*Math.PI*2;
+  for(let i=0;i<8;i++){ const a=base+i*(Math.PI/4); if(pathClear(e.x,e.y,a,e.r+40,e.r-2)) return a; }
+  return base;
+}
 // Tanks can't stack: push every overlapping pair (player + active enemies) apart.
 // Run after movement; a couple of passes settles clusters. Then re-resolve terrain.
 function resolveTankCollisions(){
@@ -248,6 +277,7 @@ function resolveTankCollisions(){
   }
 }
 function moveEnemy(e,dt){
+  const ox=e.x, oy=e.y;
   e.x+=e.vx*dt; e.y+=e.vy*dt;
   if(e.entering){
     // siege: no frame clamp until the tank's center crosses into the arena, then clamp normally
@@ -257,6 +287,14 @@ function moveEnemy(e,dt){
     e.y=Math.max(FRAME+e.r,Math.min(H-FRAME-e.r,e.y));
   }
   pushOutTerrain(e);
+  // stuck detection: wanted to move but the frame/terrain ate most of it. Accrues while
+  // jammed, bleeds off faster when moving freely; driveEnemy reads _stuckMs to flip a
+  // cut-off tank into idle wander. Skipped while entering (those drive in from off-screen).
+  if(!e.entering){
+    const want=Math.hypot(e.vx,e.vy)*dt, got=Math.hypot(e.x-ox, e.y-oy);
+    if(want>20*dt && got < want*0.35) e._stuckMs=(e._stuckMs||0)+dt*1000;
+    else e._stuckMs=Math.max(0, (e._stuckMs||0)-dt*1500);
+  }
 }
 
 // ---- tread marks: dropped while moving; fade out; cleared between levels ----
