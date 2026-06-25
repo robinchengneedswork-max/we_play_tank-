@@ -28,6 +28,7 @@ function loadPrefs(){ try{ const s=localStorage.getItem('tankPrefs'); if(!s) ret
 loadPrefs();
 
 const FRAME = 18;                 // board inner margin (px)
+const HEAVY_STUN_MS = 1300;       // Heavy player: a track hit roots you this long (enemy heavy is permanent)
 
 let W=0, H=0, DPR=1;             // canvas size, set in main.resize()
 let mode='brawl';                 // 'brawl' | 'pubg'  (right-stick fire model)
@@ -47,4 +48,7 @@ const CLASSES = {
               moveMul:0.75, shellMul:1.0,  bounce:2, maxShells:3, rocket:false, turretArc:null },
   destroyer:{ key:'destroyer',name:'Tank Destroyer', desc:'Slow · rocket gun · 2 ricochet · frontal gun',
               moveMul:0.65, shellMul:1.25, bounce:2, maxShells:2, rocket:true,  turretArc:Math.PI*35/180 },
+  heavy:    { key:'heavy',    name:'Heavy',          desc:'Slow · front deflects shots · tracks can be blown',
+              moveMul:0.6,  shellMul:1.0,  bounce:1, maxShells:2, rocket:false, turretArc:null,
+              armor:{ frontArc:Math.PI*0.30, rearArc:Math.PI*0.30, deflect:true, tracks:true } },
 };

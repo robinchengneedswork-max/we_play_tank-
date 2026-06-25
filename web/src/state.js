@@ -2,7 +2,8 @@
 // state — world data + layout/spawn setup. No rendering, no input.
 
 const tank={x:0,y:0,r:17,bodyAngle:0,turretAngle:-Math.PI/2,vx:0,vy:0,
-            team:'player',hp:3,maxHp:3,lastFire:0,fireSlowUntil:0};
+            team:'player',hp:3,maxHp:3,lastFire:0,fireSlowUntil:0,
+            armor:null,trackBroken:false,immobileUntil:0};   // Heavy class: directional armor + timed root
 let blockRects=[];       // solid obstacle rects (pixel space); baked from the map by projectMap()
 let holeRects=[];        // pits (+ water, tagged): block movement, but shells fly over + LOS clear (M1)
 let crates=[];           // destructible cover {x,y,w,h,hp,max,crate} — bounce+block until broken (M3)
@@ -64,7 +65,7 @@ function spawnEnemy(typeName, x, y){
     x, y, r:t.r, vx:0, vy:0,
     bodyAngle:Math.random()*Math.PI*2, turretAngle:Math.random()*Math.PI*2, aimTarget:0,
     hp:t.hp, maxHp:t.hp,
-    armor:t.armor||null, trackBroken:false, immobile:false,   // heavy: directional armor + track break
+    armor:t.armor||null, trackBroken:false, immobileUntil:0,   // heavy: directional armor + track break
     // per-tank combat stats (fire() reads these; players have none → cfg fallback)
     speed:t.speed, shellSpeed:t.shellSpeed, bounce:t.bounce, cd:t.cd, maxShells:t.maxShells,
     rocket:t.rocket, aim:t.aim, engage:t.engage, mines:t.mines, invisible:t.invisible,
@@ -209,6 +210,7 @@ function resetPlayerToSpawn(){
   tank.x=p.x; tank.y=p.y; tank.vx=0; tank.vy=0;
   tank.bodyAngle=0; tank.turretAngle=-Math.PI/2; tank.aimTarget=tank.turretAngle;
   tank.lastFire=0; tank.fireSlowUntil=0;
+  tank.trackBroken=false; tank.immobileUntil=0;    // tracks repaired on (re)spawn
 }
 
 // Reset the arena for a fresh start of either mode.

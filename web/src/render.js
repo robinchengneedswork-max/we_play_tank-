@@ -42,7 +42,7 @@ function darken(hex,f){
 function drawTank(t,col,colDark){
   ctx.save();ctx.translate(t.x,t.y);
   ctx.save();ctx.rotate(t.bodyAngle);
-  const treadCol = t.immobile ? '#7a3b32' : colDark;   // broken track reads red
+  const treadCol = (t.immobileUntil||0) > performance.now() ? '#7a3b32' : colDark;   // blown track reads red
   ctx.fillStyle=treadCol;ctx.fillRect(-t.r-2,-t.r+1,t.r*2+4,5);
   ctx.fillRect(-t.r-2,t.r-6,t.r*2+4,5);
   ctx.fillStyle=col;ctx.fillRect(-t.r,-t.r+3,t.r*2,t.r*2-6);

@@ -29,6 +29,8 @@ async function startMode(m, classKey){
   runClassKey = (m==='roguelike') ? (classKey||runClassKey||'medium') : null;
   run.class = runClassKey ? CLASSES[runClassKey] : null;     // sandbox: null = cfg baseline
   tank.rocket = !!(run.class && run.class.rocket);
+  tank.armor = (run.class && run.class.armor) || null;   // Heavy class: directional armor (null = no armor)
+  tank.trackBroken = false; tank.immobileUntil = 0;
   resetArena();
   setHudForMode();
   updateHud();

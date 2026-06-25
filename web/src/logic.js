@@ -160,7 +160,7 @@ function driveEnemy(e, now){
   }
   const dx=tank.x-e.x, dy=tank.y-e.y, dist=Math.hypot(dx,dy)||1;
   // movement: hold a band around `engage`, steering around cover to reach it
-  if(e.immobile){ e.vx=0; e.vy=0; }            // track-broken: dead in the water, but turret still hunts
+  if(now < (e.immobileUntil||0)){ e.vx=0; e.vy=0; }   // track-broken: dead in the water, but turret still hunts
   else if(e.speed>0){
     let dir=null;
     if(dist>e.engage+20)      dir=Math.atan2(dy,dx);     // approach
@@ -329,8 +329,9 @@ function update(dt){
       // recoil brake: speed drops for a moment after firing
       const baseMove = pMove();
       const moveSpeed = now<tank.fireSlowUntil ? Math.max(20, baseMove-cfg.fireSlow*run.mods.fireSlow) : baseMove;
-      const mp=activePointer('move');
-      const kbDir=kbMoveDir();                     // desktop: WASD/arrows drive at full speed
+      const rooted = now < (tank.immobileUntil||0);  // Heavy track blown: no drive/turn until it repairs
+      const mp = rooted ? null : activePointer('move');
+      const kbDir = rooted ? null : kbMoveDir();   // desktop: WASD/arrows drive at full speed
       if(kbDir!==null){
         tank.vx=Math.cos(kbDir)*moveSpeed; tank.vy=Math.sin(kbDir)*moveSpeed;
         let d=((kbDir-tank.bodyAngle+Math.PI)%(2*Math.PI))-Math.PI; tank.bodyAngle+=d*cfg.body;
@@ -339,6 +340,7 @@ function update(dt){
         const target=s.ang; let d=((target-tank.bodyAngle+Math.PI)%(2*Math.PI))-Math.PI;
         tank.bodyAngle+=d*cfg.body;
       } else { tank.vx*=0.8; tank.vy*=0.8; }
+      if(rooted){ tank.vx=0; tank.vy=0; }          // track blown: hard stop, no coasting
       tank.x+=tank.vx*dt; tank.y+=tank.vy*dt;
       // tank vs frame
       tank.x=Math.max(FRAME+tank.r,Math.min(W-FRAME-tank.r,tank.x));
@@ -413,7 +415,7 @@ function update(dt){
       if(!victim){ for(const e of enemies){ if(e.spawning || (sh.owner===e && sh.arm>0)) continue;
         if(Math.hypot(sh.x-e.x,sh.y-e.y)<e.r+4){ victim=e; break; } } }
       if(victim){
-        const act = victim.team==='player' ? 'damage' : resolveHit(victim, sh);
+        const act = victim.armor ? resolveHit(victim, sh) : 'damage';   // armored (heavy enemy OR Heavy player) reads the face
         if(act==='deflect'){
           // bounce the shell off the glacis plate (reflect about the hull normal, like a wall)
           const nx=sh.x-victim.x, ny=sh.y-victim.y, nl=Math.hypot(nx,ny)||1, ux=nx/nl, uy=ny/nl;
@@ -424,7 +426,10 @@ function update(dt){
           if(sh.b<0) dead=true;                       // spent its bounces → fizzle; else it flies on (maybe back at you)
           break;
         } else if(act==='absorb'){
-          victim.trackBroken=true; victim.immobile=true;            // mobility-killed, this side now vulnerable
+          // track hit absorbed: enemy heavy breaks PERMANENTLY (side then vulnerable);
+          // the 1-hp player heavy is only ROOTED for a beat (tracks "repair", stays alive)
+          if(victim.team==='player'){ victim.immobileUntil = now + HEAVY_STUN_MS; }
+          else { victim.trackBroken=true; victim.immobileUntil = Infinity; }
           burst(sh.x,sh.y,victim.color,8); SFX.hit();
           if(cfg.shake) shake=Math.min(shake+3,9);
           dead=true; break;                                          // shell consumed, no hp loss
