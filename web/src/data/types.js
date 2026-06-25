@@ -34,4 +34,9 @@ const TYPES = {
   black:  { color:'#3a3732', speed:185, shellSpeed:470, bounce:0, cd:620,  maxShells:2, rocket:true,  aim:'track',   engage:120,  mines:2, invisible:false, fireGap:[550,950],   hp:2, r:16 },
   heavy:  { color:'#6b7079', speed:55,  shellSpeed:310, bounce:1, cd:1400, maxShells:1, rocket:false, aim:'track',   engage:200,  mines:0, invisible:false, fireGap:[1800,2800], hp:3, r:19,
             armor:{ frontArc:Math.PI*0.30, rearArc:Math.PI*0.30, deflect:true, tracks:true } },
+  // Boss (run arc, every 10th wave): big, durable, rocket gun w/ bank-aim. Thick glacis that
+  // deflects normal shells until its plates are spent (BOSS_PLATES) — flank or rocket it.
+  // tracks:false → side hits damage instead of immobilizing (a boss shouldn't be a sitting duck).
+  boss:   { color:'#5a4a6b', speed:48,  shellSpeed:360, bounce:2, cd:780,  maxShells:3, rocket:true,  aim:'predict', engage:270,  mines:0, invisible:false, fireGap:[900,1400], hp:8, r:27, boss:true,
+            armor:{ frontArc:Math.PI*0.32, rearArc:Math.PI*0.34, deflect:true, tracks:false } },
 };

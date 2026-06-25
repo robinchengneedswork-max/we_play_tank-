@@ -60,28 +60,71 @@ const elHits=document.getElementById('statHits');
 const elRun=document.getElementById('statRun');
 function updateHud(){
   elHits.textContent='Hits '+score;
-  elRun.textContent='Lv '+run.level+' · '+'♥'.repeat(run.hp)+' · ◆'+run.scrap;
+  let s='Lv '+run.level+' · '+'♥'.repeat(Math.max(0,run.hp))+' · ◆'+run.scrap;
+  if(run.gunMode) s+=' · '+(run.gunMode==='laser'?'⚡':'➹');          // equipped gun-mode
+  if(run.gadget)  s+=' · ⚙'+run.gadgetCharges+'/'+run.gadgetMaxCharges; // gadget charges
+  elRun.textContent=s;
 }
 
-// ---- between-wave upgrade pick (3 cards; pauses the sim via run.phase==='upgrade') ----
-const upOverlay=document.getElementById('upgrade');
-const upCards=document.getElementById('upgradeCards');
-function offerUpgrade(){
-  run.phase='upgrade';
-  shake=0;                  // kill any leftover shake from the wave-ending hit (update() stops decaying it now)
-  const cost=upgradeCost();
-  document.getElementById('upCost').textContent='◆ '+cost+' scrap   (you have '+run.scrap+')';
-  upCards.innerHTML='';
-  pickUpgrades(3).forEach(u=>{
-    const b=document.createElement('button');
-    b.className='up-card';
-    b.innerHTML='<b>'+u.name+'</b><small>'+u.desc+'</small>';
-    b.onclick=()=>{ run.scrap-=cost; run.upgradesTaken++; u.apply(); updateHud(); upOverlay.classList.remove('active'); nextWave(); };
-    upCards.appendChild(b);
-  });
-  upOverlay.classList.add('active');
+// ---- Supply Depot (FTL-style shop; pauses the sim via run.phase==='shop') ----
+// Banked scrap is spent here on à-la-carte stat lines (per-line escalating cost), repairs,
+// extra lives, and 2 rolled rulebreakers. Buy as many as you can afford, then leave.
+const shopOverlay=document.getElementById('shop');
+const shopCards=document.getElementById('shopCards');
+function openShop(){
+  run.phase='shop';
+  shake=0;                  // kill any leftover shake from the wave-ending hit
+  rollShopRulebreakers();   // fresh pair of rulebreakers for this visit
+  renderShop();
+  shopOverlay.classList.add('active');
 }
-document.getElementById('upSkip').onclick=()=>{ upOverlay.classList.remove('active'); nextWave(); };
+// Build one purchasable card. cost: number; cls: extra class; onbuy: () => void.
+function shopCard(name, desc, cost, opts){
+  opts=opts||{};
+  const afford = run.scrap>=cost && !opts.disabled;
+  const b=document.createElement('button');
+  b.className='up-card '+(opts.cls||'')+(afford?'':' up-locked');
+  const tag = opts.tag ? '<span class="up-tier">'+opts.tag+'</span>' : '';
+  const price = opts.sold ? 'SOLD' : (opts.disabled ? opts.disabledLabel||'—' : '◆ '+cost);
+  b.innerHTML=tag+'<b>'+name+'</b><small>'+desc+'</small><span class="up-price">'+price+'</span>';
+  if(afford) b.onclick=()=>{ run.scrap-=cost; opts.onbuy(); updateHud(); renderShop(); };
+  return b;
+}
+function renderShop(){
+  const wt=Math.max(0, run.weight-run.engine);
+  document.getElementById('shopBal').textContent =
+    '◆ '+run.scrap+' scrap   ·   ♥ '+run.hp+'/'+run.maxHp+' lives   ·   weight '+run.weight+' / engine '+run.engine+(wt>0?'  (−'+Math.round((1-1/(1+0.07*wt))*100)+'% speed)':'');
+  shopCards.innerHTML='';
+  // stat lines (per-line escalating cost; weighty lines tagged)
+  SHOP_STOCK.forEach(line=>{
+    const cost=shopLineCost(line);
+    shopCards.appendChild(shopCard(line.name, line.desc, cost, {
+      cls: line.weight?'up-rare':'',
+      onbuy(){ run.buys[line.id]=(run.buys[line.id]||0)+1; if(line.weight) run.weight+=line.weight; line.apply(); }
+    }));
+  });
+  // consumables
+  shopCards.appendChild(shopCard('Repair', 'Restore one lost life', REPAIR_COST, {
+    disabled: run.hp>=run.maxHp, disabledLabel:'FULL',
+    onbuy(){ run.hp=Math.min(run.maxHp, run.hp+1); tank.hp=run.hp; }
+  }));
+  shopCards.appendChild(shopCard('Extra Life', 'Raise max lives by 1 (filled)', LIFE_COST, {
+    onbuy(){ run.maxHp++; run.hp++; tank.maxHp=run.maxHp; tank.hp=run.hp; }
+  }));
+  if(run.gadget) shopCards.appendChild(shopCard('Rearm: '+run.gadget.name, 'Refill gadget charges', REARM_COST, {
+    disabled: run.gadgetCharges>=run.gadgetMaxCharges, disabledLabel:'FULL',
+    onbuy(){ run.gadgetCharges=run.gadgetMaxCharges; }
+  }));
+  // 2 rolled rulebreakers (shared escalating price); bought ones drop out of the pair
+  run.shopRb.forEach((u,i)=>{
+    if(!u) return;
+    shopCards.appendChild(shopCard(u.name, u.desc, rbCost(), {
+      cls:'up-rulebreaker', tag:'RULEBREAKER',
+      onbuy(){ u.apply(); run.buys._rb=(run.buys._rb||0)+1; run.shopRb[i]=null; }
+    }));
+  });
+}
+document.getElementById('shopLeave').onclick=()=>{ shopOverlay.classList.remove('active'); nextWave(); };
 
 // ---- game over / run summary ----
 const gameover=document.getElementById('gameover');

@@ -135,6 +135,36 @@ function render(){
     ctx.beginPath();ctx.arc(m.x,m.y, armed?5:4,0,7);ctx.fill();
     ctx.globalAlpha=1;
   }
+  // player deployables — sentries / trophy / shields / spider mines
+  for(const tu of turrets){
+    ctx.save(); ctx.translate(tu.x,tu.y);
+    if(tu.kind==='trophy'){
+      ctx.globalAlpha=0.09; ctx.fillStyle='#5fd0ff'; ctx.beginPath();ctx.arc(0,0,TROPHY_R,0,7);ctx.fill(); ctx.globalAlpha=1;
+      ctx.fillStyle='#3a7d9a'; ctx.beginPath();ctx.arc(0,0,tu.r,0,7);ctx.fill();
+      ctx.fillStyle='#bfe9ff'; ctx.beginPath();ctx.arc(0,0,tu.r*0.5,0,7);ctx.fill();
+    } else {
+      const col = tu.kind==='teal'?'#3ba6a6':'#9aa0a8';
+      ctx.fillStyle='#2b2b2b'; ctx.beginPath();ctx.arc(0,0,tu.r,0,7);ctx.fill();
+      ctx.rotate(tu.turretAngle); ctx.fillStyle=col; ctx.fillRect(0,-3,tu.r+8,6);
+      ctx.beginPath();ctx.arc(0,0,tu.r-2,0,7);ctx.fill();
+    }
+    ctx.restore();
+    if(tu.hp<TURRET_HP){ ctx.fillStyle='#d9483b'; ctx.fillRect(tu.x-tu.r, tu.y-tu.r-6, tu.r*2*(tu.hp/TURRET_HP), 3); }
+  }
+  for(const sd of shields){
+    ctx.save(); ctx.translate(sd.x,sd.y);
+    ctx.strokeStyle='rgba(127,223,255,.8)'; ctx.lineWidth=4;
+    ctx.beginPath(); ctx.arc(0,0,sd.r, sd.ang-Math.PI/2, sd.ang+Math.PI/2); ctx.stroke();   // front-facing arc
+    ctx.strokeStyle='rgba(127,223,255,.22)'; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.arc(0,0,sd.r-5, sd.ang-Math.PI/2, sd.ang+Math.PI/2); ctx.stroke();
+    ctx.restore();
+  }
+  for(const m of spiderMines){
+    ctx.strokeStyle='#caa46a'; ctx.lineWidth=1.5;
+    for(let k=0;k<4;k++){ const a=k*Math.PI/2+performance.now()/200;
+      ctx.beginPath();ctx.moveTo(m.x,m.y);ctx.lineTo(m.x+Math.cos(a)*7,m.y+Math.sin(a)*7);ctx.stroke(); }
+    ctx.fillStyle=m.arm>0?'#caa46a':'#d9483b'; ctx.beginPath();ctx.arc(m.x,m.y,4,0,7);ctx.fill();
+  }
   drawPreview();
   // smoke trails (behind everything that moves)
   for(const s of smoke){
@@ -160,6 +190,11 @@ function render(){
       }
       ctx.globalAlpha=alpha;
       drawTank(e, e.color, darken(e.color,0.6));
+      if(e.boss){                                  // boss: floating HP bar (8 hp needs feedback)
+        const bw=e.r*2.2, bx=e.x-bw/2, by=e.y-e.r-12, f=Math.max(0,e.hp/e.maxHp);
+        ctx.fillStyle='rgba(0,0,0,.5)';ctx.fillRect(bx-1,by-1,bw+2,6);
+        ctx.fillStyle='#d9483b';ctx.fillRect(bx,by,bw*f,4);
+      }
     }
     ctx.globalAlpha = 1;
   }
@@ -177,12 +212,29 @@ function render(){
       ctx.beginPath();ctx.arc(sh.x,sh.y,5,0,7);ctx.fillStyle=getCSS('--shell');ctx.fill();
     }
   }
+  // laser beams (bright, brief — drawn over shells)
+  for(const bm of beams){
+    const a=Math.max(0,bm.life/bm.max);
+    ctx.save(); ctx.globalAlpha=a; ctx.strokeStyle='#ff5b6b'; ctx.lineWidth=3; ctx.shadowColor='#ff5b6b'; ctx.shadowBlur=8;
+    ctx.beginPath(); ctx.moveTo(bm.pts[0].x,bm.pts[0].y);
+    for(let k=1;k<bm.pts.length;k++) ctx.lineTo(bm.pts[k].x,bm.pts[k].y);
+    ctx.stroke(); ctx.restore();
+  }
+  ctx.globalAlpha=1;
   // particles
   for(const p of particles){ctx.globalAlpha=Math.max(0,p.life*3);ctx.fillStyle=p.c;
     ctx.beginPath();ctx.arc(p.x,p.y,3,0,7);ctx.fill();ctx.globalAlpha=1;}
   // player tank (drawn last, on top; gone once destroyed)
-  if(!(gameMode==='roguelike' && run.phase==='dead'))
+  if(!(gameMode==='roguelike' && run.phase==='dead')){
+    if(playerFlying()){ ctx.save();ctx.globalAlpha=0.22;ctx.fillStyle='#000';     // airborne shadow
+      ctx.beginPath();ctx.ellipse(tank.x,tank.y+13,tank.r+2,tank.r*0.55,0,0,7);ctx.fill();ctx.restore(); }
+    ctx.save();
+    if(playerCloaked()) ctx.globalAlpha=0.3;                                       // stealth: faded
     drawTank(tank, getCSS('--tank'), getCSS('--tank-dark'));
+    ctx.restore();
+    if(tank.charged){ ctx.save();ctx.globalAlpha=0.85;ctx.strokeStyle='#9fd8ff';ctx.lineWidth=2.5;  // vibranium charge halo
+      ctx.beginPath();ctx.arc(tank.x,tank.y,tank.r+5+Math.sin(performance.now()/90)*2,0,7);ctx.stroke();ctx.restore(); }
+  }
   ctx.restore();
   // sticks — show fixed bases where no thumb is down, then the active sticks
   if(cfg.fixedStick){
@@ -200,9 +252,22 @@ function render(){
     ctx.fillStyle='#fff';ctx.font='600 12px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
     ctx.fillText('FIRE',fireBtn.x,fireBtn.y);
   }
+  // deploy button (left index) — shown whenever a gadget is equipped; dims on cooldown / no charges
+  if(gameMode==='roguelike' && run.gadget){
+    const ready = run.gadgetCharges>0 && performance.now()>=run.gadgetCdUntil;
+    ctx.beginPath();ctx.arc(deployBtn.x,deployBtn.y,deployBtn.r,0,7);
+    ctx.fillStyle=ready?'rgba(95,160,210,.85)':'rgba(95,160,210,.4)';ctx.fill();
+    ctx.strokeStyle='rgba(255,255,255,.8)';ctx.lineWidth=3;ctx.stroke();
+    ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.font='700 15px system-ui';ctx.fillText('⚙',deployBtn.x,deployBtn.y-6);
+    ctx.font='700 12px system-ui';ctx.fillText(run.gadgetCharges+'/'+run.gadgetMaxCharges,deployBtn.x,deployBtn.y+11);
+  }
   // wave countdown banner (screen-fixed, drawn outside the shake transform)
   if(gameMode==='roguelike' && run.phase==='intermission'){
-    ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';ctx.fillStyle=getCSS('--ink');
+    ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';
+    if(run.waveKind==='boss'){ ctx.fillStyle='#d9483b';ctx.font='800 17px system-ui';ctx.fillText('⚠  BOSS WAVE  ⚠', W/2, H/2-48); }
+    else if(run.waveKind==='elite'){ ctx.fillStyle='#d6a64a';ctx.font='800 17px system-ui';ctx.fillText('★  ELITE WAVE  ★', W/2, H/2-48); }
+    ctx.fillStyle=getCSS('--ink');
     ctx.font='800 26px system-ui';ctx.fillText('WAVE '+run.level, W/2, H/2-18);
     ctx.font='800 44px system-ui';ctx.fillText(Math.max(1,Math.ceil(run.timer/1000)), W/2, H/2+24);
     ctx.restore();

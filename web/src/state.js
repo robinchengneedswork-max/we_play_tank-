@@ -4,7 +4,8 @@
 const tank={x:0,y:0,r:17,bodyAngle:0,turretAngle:-Math.PI/2,vx:0,vy:0,
             team:'player',hp:3,maxHp:3,lastFire:0,fireSlowUntil:0,
             armor:null,trackBroken:false,immobileUntil:0,plates:0,
-            brokenSides:{pos:false,neg:false}};   // Heavy class: directional armor, front plates, timed root, per-side detrack
+            brokenSides:{pos:false,neg:false},      // Heavy class: directional armor, front plates, timed root, per-side detrack
+            flying:0,cloak:0,charged:false,iframes:0}; // jump-jets airborne-until · stealth-since · vibranium charged · dash i-frames-until
 let blockRects=[];       // solid obstacle rects (pixel space); baked from the map by projectMap()
 let holeRects=[];        // pits (+ water, tagged): block movement, but shells fly over + LOS clear (M1)
 let crates=[];           // destructible cover {x,y,w,h,hp,max,crate} — bounce+block until broken (M3)
@@ -15,18 +16,27 @@ let shells=[];           // {x,y,vx,vy,b,life,team,owner}
 let particles=[];        // sparks (muzzle / hit / death bursts)
 let smoke=[];            // shell smoke trails (drawn behind shells)
 let mines=[];            // {x,y,team,owner,arm,fuse,blast,dead}
+let turrets=[];          // player-deployed sentries/trophy {x,y,r,hp,team,kind,turretAngle,lastFire,expire}
+let shields=[];          // player-deployed one-way arcs {x,y,r,ang,expire}
+let spiderMines=[];      // player-deployed walking mines {x,y,vx,vy,arm,dead}
+let beams=[];            // transient laser draws {pts:[{x,y}...],life,max}
 let tracks=[];           // tread marks {x,y,a,life,max} — fade out; cleared between levels
 let score=0;
 let shake=0;
 
 // Roguelike run state. `mods` are the player's run upgrades, layered over cfg
 // as multipliers/adders (so cfg stays the live-tunable baseline; sandbox = baseline).
-const run={ level:1, kills:0, hp:3, maxHp:3, phase:'fighting', timer:0, mods:freshMods(), siege:null, scrap:0, upgradesTaken:0, class:null, maxPlates:0 };
-function freshMods(){ return {move:1, turret:1, cd:1, shell:1, maxShells:0, bounce:0, fireSlow:1}; }
+const run={ level:1, kills:0, hp:3, maxHp:3, phase:'fighting', timer:0, mods:freshMods(), siege:null,
+            scrap:0, class:null, maxPlates:0, waveKind:'normal',
+            buys:{}, weight:0, engine:0, shopRb:[],   // FTL depot: per-line buy counts, weight vs engine, this shop's rulebreaker roll
+            gunMode:null, gadget:null, gadgetCharges:0, gadgetMaxCharges:0, gadgetCdUntil:0, vibranium:false };  // arsenal slots
+function freshMods(){ return {move:1, turret:1, cd:1, shell:1, maxShells:0, bounce:0, fireSlow:1, pierce:0, spread:0, bounceRocket:0}; }
 function resetRun(){
   run.level=1; run.kills=0; run.maxHp=3; run.hp=run.maxHp;
   run.phase='fighting'; run.timer=0; run.mods=freshMods(); run.siege=null;
-  run.scrap=0; run.upgradesTaken=0; run.maxPlates=0;
+  run.scrap=0; run.maxPlates=0; run.waveKind='normal';
+  run.buys={}; run.weight=0; run.engine=0; run.shopRb=[];
+  run.gunMode=null; run.gadget=null; run.gadgetCharges=0; run.gadgetMaxCharges=0; run.gadgetCdUntil=0; run.vibranium=false;
   // run.class is set by startMode after resetRun (sandbox leaves it null = cfg baseline)
 }
 const INTERMISSION_MS=2600;   // breather + countdown before a wave goes live
@@ -36,25 +46,106 @@ const REINFORCE_GAP=2600;     // ms between reinforcement spawns during the hold
 // Scrap economy: kills drop scrap (collect by driving over it); upgrades cost scrap
 // and the price climbs per purchase, so upgrades are earned, not every-wave.
 const SCRAP_LIFE=18;          // seconds a scrap drop lingers before fading
-const UPGRADE_BASE=3, UPGRADE_STEP=2;
-function upgradeCost(){ return UPGRADE_BASE + run.upgradesTaken*UPGRADE_STEP; }
+// ---- Supply Depot (FTL-style shop) ----
+// A depot opens every SHOP_EVERY cleared waves (and after every boss). Scrap banks until then.
+const SHOP_EVERY=3;
+const REPAIR_COST=3, LIFE_COST=7, REARM_COST=2;  // consumables: restore a lost life / raise the ceiling / refill gadget charges
+const RB_BASE=8, RB_STEP=4;                // rulebreaker price, climbs per rulebreaker bought
+// Stat lines bought à la carte: each line costs more the more you own of THAT line. Some add
+// WEIGHT (slows you) — Engine upgrades raise capacity to offset it (see weightMoveMul in logic).
+const SHOP_STOCK=[
+  {id:'engine',   name:'Engine',      desc:'+8% speed · +1 weight capacity', base:3, step:3, apply(){ run.mods.move*=1.08; run.engine++; }},
+  {id:'treads',   name:'Treads',      desc:'+15% move speed',                base:3, step:3, apply(){ run.mods.move*=1.15; }},
+  {id:'gyro',     name:'Gyro',        desc:'+20% turret turn',               base:2, step:2, apply(){ run.mods.turret*=1.2; }},
+  {id:'loader',   name:'Autoloader',  desc:'-15% fire cooldown',             base:3, step:2, apply(){ run.mods.cd*=0.85; }},
+  {id:'velocity', name:'Hi-Velocity', desc:'+18% shell speed',               base:2, step:2, apply(){ run.mods.shell*=1.18; }},
+  {id:'magazine', name:'Magazine',    desc:'+1 shell on screen · +1 weight', base:4, step:3, weight:1, apply(){ run.mods.maxShells+=1; }},
+  {id:'ricochet', name:'Ricochet',    desc:'+1 ricochet · +1 weight',        base:4, step:3, weight:1, apply(){ run.mods.bounce+=1; }},
+];
+function shopLineCost(line){ return line.base + line.step*(run.buys[line.id]||0); }
+function rbCost(){ return RB_BASE + RB_STEP*(run.buys._rb||0); }
+function rollShopRulebreakers(){ run.shopRb = pickUpgrades(2,'rulebreaker'); }   // 2 distinct rulebreakers per visit
+
+// ---- Gadgets (the one active-ability slot; charge-based, deployed via the deploy input) ----
+// Metadata only; the effect lives in logic.js deployGadget() (switch on id). `aim` gadgets deploy
+// toward the turret, `move` ones toward the drive direction.
+const GADGETS={
+  sentryTeal:  { id:'sentryTeal',  name:'Sentry: Rocket', desc:'Deploy an immobile rocket turret', maxCharges:2, cd:1500, dir:'aim'  },
+  sentryGrey:  { id:'sentryGrey',  name:'Sentry: Gun',    desc:'Deploy an immobile gun turret',    maxCharges:2, cd:1500, dir:'aim'  },
+  trophy:      { id:'trophy',      name:'Trophy System',  desc:'Deploy a turret that zaps incoming shells', maxCharges:2, cd:1500, dir:'aim' },
+  shield:      { id:'shield',      name:'One-way Shield', desc:'Deploy a frontal shell-stopping arc', maxCharges:3, cd:1200, dir:'aim' },
+  spiderMines: { id:'spiderMines', name:'Spider Mines',   desc:'Release mines that crawl at enemies', maxCharges:3, cd:1500, dir:'aim' },
+  dash:        { id:'dash',        name:'Dash',           desc:'Blink a short distance (brief i-frames)', maxCharges:4, cd:700,  dir:'move' },
+  jumpJets:    { id:'jumpJets',    name:'Jump Jets',      desc:'Fly 3s — no hits, cross holes & walls', maxCharges:3, cd:2000, dir:'move' },
+  stealth:     { id:'stealth',     name:'Stealth',        desc:'Vanish from enemies until you fire (10s)', maxCharges:3, cd:2000, dir:'aim' },
+};
+function equipGadget(g){
+  run.gadget=g;
+  run.gadgetMaxCharges = g.maxCharges||GADGET_CHARGES;
+  run.gadgetCharges = run.gadgetMaxCharges;
+  run.gadgetCdUntil = 0;
+}
 
 // Upgrade pool offered between waves. apply() mutates run.mods (or HP).
+// tier: 'common' (small stat bumps) | 'rare' (structural) | 'rulebreaker' (new mechanic).
+// rulebreakers carry the `rulebreaker:true` flag the offer UI styles + the boss reward filters on.
 const UPGRADES=[
-  {name:'Treads',      desc:'+20% move speed',    apply(){ run.mods.move*=1.2; }},
-  {name:'Gyro',        desc:'+25% turret turn',   apply(){ run.mods.turret*=1.25; }},
-  {name:'Autoloader',  desc:'-18% fire cooldown', apply(){ run.mods.cd*=0.82; }},
-  {name:'Hi-Velocity', desc:'+20% shell speed',   apply(){ run.mods.shell*=1.2; }},
-  {name:'Magazine',    desc:'+1 shell on screen', apply(){ run.mods.maxShells+=1; }},
-  {name:'Ricochet',    desc:'+1 ricochet',        apply(){ run.mods.bounce+=1; }},
-  {name:'Plating',     desc:'+1 max HP & heal',   apply(){ run.maxHp+=1; run.hp=run.maxHp; tank.maxHp=run.maxHp; tank.hp=run.maxHp; }},
-  {name:'Recoil damp', desc:'-50% fire slow',     apply(){ run.mods.fireSlow*=0.5; }},
-  {name:'Armor Plating', desc:'Front deflects shots · +2 plates', rulebreaker:true,
+  {name:'Treads',      tier:'common', desc:'+20% move speed',    apply(){ run.mods.move*=1.2; }},
+  {name:'Gyro',        tier:'common', desc:'+25% turret turn',   apply(){ run.mods.turret*=1.25; }},
+  {name:'Autoloader',  tier:'common', desc:'-18% fire cooldown', apply(){ run.mods.cd*=0.82; }},
+  {name:'Hi-Velocity', tier:'common', desc:'+20% shell speed',   apply(){ run.mods.shell*=1.2; }},
+  {name:'Recoil damp', tier:'common', desc:'-50% fire slow',     apply(){ run.mods.fireSlow*=0.5; }},
+  {name:'Magazine',    tier:'rare',   desc:'+1 shell on screen', apply(){ run.mods.maxShells+=1; }},
+  {name:'Ricochet',    tier:'rare',   desc:'+1 ricochet',        apply(){ run.mods.bounce+=1; }},
+  {name:'Plating',     tier:'rare',   desc:'+1 max HP & heal',   apply(){ run.maxHp+=1; run.hp=run.maxHp; tank.maxHp=run.maxHp; tank.hp=run.maxHp; }},
+  {name:'Armor Plating', tier:'rulebreaker', rulebreaker:true, desc:'Front deflects shots · +2 plates',
     apply(){ if(!tank.armor) tank.armor=FRONT_ARMOR; run.maxPlates+=HEAVY_PLATES; tank.plates=run.maxPlates; }},
+  {name:'Piercing Rounds', tier:'rulebreaker', rulebreaker:true, desc:'Shells punch through +1 tank',
+    apply(){ run.mods.pierce+=1; }},
+  {name:'Scattergun', tier:'rulebreaker', rulebreaker:true, desc:'Fire a wider shell spread (+2 pellets)',
+    apply(){ run.mods.spread+=1; }},
+  // gun-modes (replace the main gun) + the passive bounce-rocket shell mod
+  {name:'Laser', tier:'rulebreaker', rulebreaker:true, desc:'Gun → hitscan laser · bounces · slower',
+    apply(){ run.gunMode='laser'; }},
+  {name:'Wire-Guided Missiles', tier:'rulebreaker', rulebreaker:true, desc:'Gun → steer the missile (hold aim)',
+    apply(){ run.gunMode='wireGuided'; }},
+  {name:'Bounce Rockets', tier:'rulebreaker', rulebreaker:true, desc:'A bounced shell locks on & rockets in',
+    apply(){ run.mods.bounceRocket=1; }},
+  {name:'Vibranium Plate', tier:'rulebreaker', rulebreaker:true, desc:'Survive a hit → charge & ram (vulnerable till you do)',
+    apply(){ run.vibranium=true; }},
+  // gadgets (the active-ability slot; equipping fills its charges)
+  {name:'Rocket Sentry', tier:'rulebreaker', rulebreaker:true, desc:'Gadget: deploy an immobile rocket turret',
+    apply(){ equipGadget(GADGETS.sentryTeal); }},
+  {name:'Gun Sentry', tier:'rulebreaker', rulebreaker:true, desc:'Gadget: deploy an immobile gun turret',
+    apply(){ equipGadget(GADGETS.sentryGrey); }},
+  {name:'Trophy System', tier:'rulebreaker', rulebreaker:true, desc:'Gadget: a turret that zaps incoming shells',
+    apply(){ equipGadget(GADGETS.trophy); }},
+  {name:'One-way Shield', tier:'rulebreaker', rulebreaker:true, desc:'Gadget: a frontal shell-stopping arc',
+    apply(){ equipGadget(GADGETS.shield); }},
+  {name:'Spider Mines', tier:'rulebreaker', rulebreaker:true, desc:'Gadget: mines that crawl at enemies',
+    apply(){ equipGadget(GADGETS.spiderMines); }},
+  {name:'Dash', tier:'rulebreaker', rulebreaker:true, desc:'Gadget: blink a short distance (i-frames)',
+    apply(){ equipGadget(GADGETS.dash); }},
+  {name:'Jump Jets', tier:'rulebreaker', rulebreaker:true, desc:'Gadget: fly 3s — no hits, cross terrain',
+    apply(){ equipGadget(GADGETS.jumpJets); }},
+  {name:'Stealth', tier:'rulebreaker', rulebreaker:true, desc:'Gadget: vanish from enemies until you fire',
+    apply(){ equipGadget(GADGETS.stealth); }},
 ];
-function pickUpgrades(n){
-  const pool=[...UPGRADES], out=[];
-  for(let i=0;i<n && pool.length;i++) out.push(pool.splice(Math.floor(Math.random()*pool.length),1)[0]);
+// Tier-weighted offer (no dupes). Rares/rulebreakers are scarce early and grow likelier
+// deeper into a run. `tierFilter` restricts the pool (boss reward = rulebreakers only).
+const TIER_WEIGHT={ common:1, rare:0.42, rulebreaker:0.16 };
+function pickUpgrades(n, tierFilter){
+  const pool=UPGRADES.filter(u=>!tierFilter || u.tier===tierFilter);
+  const lvl=run.level||1;
+  const boost=u=>({ common:1, rare:1+lvl*0.05, rulebreaker:1+lvl*0.045 }[u.tier]||1);
+  const wt=u=>(TIER_WEIGHT[u.tier]||1)*boost(u);
+  const out=[];
+  while(out.length<n && pool.length){
+    let total=0; for(const u of pool) total+=wt(u);
+    let r=Math.random()*total, idx=pool.length-1;
+    for(let j=0;j<pool.length;j++){ r-=wt(pool[j]); if(r<=0){ idx=j; break; } }
+    out.push(pool.splice(idx,1)[0]);
+  }
   return out;
 }
 
@@ -67,8 +158,8 @@ function spawnEnemy(typeName, x, y){
     type:typeName, team:'enemy', color:t.color,
     x, y, r:t.r, vx:0, vy:0,
     bodyAngle:Math.random()*Math.PI*2, turretAngle:Math.random()*Math.PI*2, aimTarget:0,
-    hp:t.hp, maxHp:t.hp,
-    armor:t.armor||null, trackBroken:false, immobileUntil:0, plates:t.armor?HEAVY_PLATES:0,   // heavy: directional armor + front plates + track break
+    hp:t.hp, maxHp:t.hp, boss:!!t.boss,
+    armor:t.armor||null, trackBroken:false, immobileUntil:0, plates:t.boss?BOSS_PLATES:(t.armor?HEAVY_PLATES:0),   // heavy/boss: directional armor + front plates + track break
     // per-tank combat stats (fire() reads these; players have none → cfg fallback)
     speed:t.speed, shellSpeed:t.shellSpeed, bounce:t.bounce, cd:t.cd, maxShells:t.maxShells,
     rocket:t.rocket, aim:t.aim, engage:t.engage, mines:t.mines, invisible:t.invisible,
@@ -176,15 +267,32 @@ const WAVES=[
   ['purple','red','red','green','green','teal'],
   ['heavy','grey','grey','red','green'],              // wave 8: the heavy arrives
 ];
+// Run arc: every 10th wave is a BOSS, every 5th (otherwise) an ELITE milestone.
+// Boss/elite waves always warp (forced in beginWave) so they read clean + reward cleanly.
+function waveKindFor(level){
+  if(level%10===0) return 'boss';
+  if(level%5===0)  return 'elite';
+  return 'normal';
+}
 function waveRoster(level){
-  if(level<WAVES.length) return WAVES[level].slice();
-  // 9+: procedural escalation; introduce White, Black, then Heavy, cap ~12
-  const pool=['grey','teal','red','green','purple','yellow','white','black','heavy'];
-  const n=Math.min(6+(level-7),12);
-  const out=[]; for(let i=0;i<n;i++) out.push(pool[Math.floor(Math.random()*pool.length)]);
-  if(level>=9 && !out.includes('white')) out[0]='white';
-  if(level>=10 && !out.includes('black')) out[1]='black';
-  if(level>=11 && !out.includes('heavy')) out[2]='heavy';
+  const kind=waveKindFor(level);
+  if(kind==='boss'){
+    // a lone boss flanked by a small honor guard that scales a touch with depth
+    const guard = level>=20 ? ['red','red','heavy','black'] : ['red','red','heavy'];
+    return ['boss', ...guard];
+  }
+  let out;
+  if(level<WAVES.length) out=WAVES[level].slice();
+  else {
+    // 9+: procedural escalation; introduce White, Black, then Heavy, cap ~12
+    const pool=['grey','teal','red','green','purple','yellow','white','black','heavy'];
+    const n=Math.min(6+(level-7),12);
+    out=[]; for(let i=0;i<n;i++) out.push(pool[Math.floor(Math.random()*pool.length)]);
+    if(level>=9 && !out.includes('white')) out[0]='white';
+    if(level>=10 && !out.includes('black')) out[1]='black';
+    if(level>=11 && !out.includes('heavy')) out[2]='heavy';
+  }
+  if(kind==='elite') out.push('heavy','black');   // beefed-up milestone roster
   return out;
 }
 // Load a fresh map, spawn the level's wave (warp-in or off-screen siege per the
@@ -193,8 +301,11 @@ function waveRoster(level){
 function beginWave(){
   loadNextMap();                 // rotate to a new arena each wave (rebuilds crates at full hp)
   mines.length=0; tracks.length=0; shells.length=0; smoke.length=0; particles.length=0; pickups.length=0;
+  turrets.length=0; shields.length=0; spiderMines.length=0; beams.length=0;   // player deployables don't carry between waves
   resetPlayerToSpawn();          // player to the new map's 'S'
-  if(currentMap.def.spawn==='siege' && holdRect){
+  run.waveKind=waveKindFor(run.level);
+  // Boss + elite milestones always play as a warp wave (skip siege) so their reward path is clean.
+  if(currentMap.def.spawn==='siege' && holdRect && run.waveKind==='normal'){
     // SIEGE: garrison warps into the fortress; you assault, then hold (see updateSiege).
     run.siege={ phase:'assault', timer:HOLD_MS, max:HOLD_MS, nextSpawn:0 };
     const roster=waveRoster(run.level), gn=Math.min(roster.length, 3+Math.floor(run.level/2));
@@ -217,11 +328,13 @@ function resetPlayerToSpawn(){
   tank.trackBroken=false; tank.immobileUntil=0;    // tracks repaired on (re)spawn
   tank.brokenSides={pos:false,neg:false};
   tank.plates=run.maxPlates||0;                    // front plates refill each life
+  tank.flying=0; tank.cloak=0; tank.charged=false; tank.iframes=0; // arsenal states don't carry across (re)spawns
 }
 
 // Reset the arena for a fresh start of either mode.
 function resetArena(){
   shells.length=0; particles.length=0; smoke.length=0; mines.length=0; tracks.length=0; enemies.length=0; pickups.length=0;
+  turrets.length=0; shields.length=0; spiderMines.length=0; beams.length=0;
   tank.team='player'; tank.maxHp=run.maxHp; tank.hp=run.maxHp;
   score=0;
   if(gameMode==='sandbox'){ loadNextMap(); resetPlayerToSpawn(); spawnSandboxSet(); }
@@ -232,6 +345,7 @@ function resetArena(){
 function sandboxNextMap(){
   loadNextMap();
   shells.length=0; smoke.length=0; mines.length=0; tracks.length=0; particles.length=0; enemies.length=0; pickups.length=0;
+  turrets.length=0; shields.length=0; spiderMines.length=0; beams.length=0;
   resetPlayerToSpawn();
   spawnSandboxSet();
 }
@@ -242,6 +356,7 @@ function sandboxNextMap(){
 function restartLevel(){
   if(!(gameMode==='roguelike' && run.phase==='dead')) return;   // guard the delayed call
   shells.length=0; mines.length=0; smoke.length=0; particles.length=0; tracks.length=0; pickups.length=0;
+  turrets.length=0; shields.length=0; spiderMines.length=0; beams.length=0;
   projectMap();                  // same map, but rebuild crates to full hp for the retry
   resetPlayerToSpawn();          // same map (retry), so spawn is unchanged
   const now=performance.now();

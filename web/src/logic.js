@@ -5,39 +5,245 @@
 // so with no upgrades the player is exactly cfg — live tuning + sandbox unchanged).
 // class layer: moveMul/shellMul scale cfg; bounce/maxShells come from the class
 // (falling back to cfg when no class is set, e.g. sandbox). run.mods stack on top.
-function pMove(){   return cfg.move   * (run.class?run.class.moveMul :1) * run.mods.move; }
+// Weight tax: each point of net weight (purchases over engine capacity) shaves move speed;
+// Engine upgrades raise capacity to cancel it. No weight/engine (e.g. sandbox) → 1.0, unchanged.
+function weightMoveMul(){ return 1/(1+0.07*Math.max(0, run.weight-run.engine)); }
+function pMove(){   return cfg.move   * (run.class?run.class.moveMul :1) * run.mods.move * weightMoveMul() * (tank.charged?VIBRANIUM_BOOST:1); }
 function pTurret(){ return cfg.turret * run.mods.turret; }
 function pCd(){     return cfg.cd     * run.mods.cd; }
 function pShell(){  return cfg.shell  * (run.class?run.class.shellMul:1) * run.mods.shell; }
 function pBounce(){ return (run.class?run.class.bounce   :cfg.bounce)   + run.mods.bounce; }
 function pMaxShells(){ return Math.round((run.class?run.class.maxShells:cfg.maxshell) + run.mods.maxShells); }
 
-// Generic fire: any tank shoots along `aim`. Enemies read their per-tank stats;
-// the player reads cfg×mods. tryFire() is the player's wrapper.
+// ---- arsenal helpers ----
+function cellPx(){ return currentMap ? (W-2*FRAME)/currentMap.C : 80; }   // one map cell in px (sizing for ranges/turn radius)
+function playerCloaked(){ return tank.cloak>0 && (performance.now()-tank.cloak) < STEALTH_MS; }
+function playerFlying(){ return tank.flying>0 && performance.now() < tank.flying; }
+
+// Deploy the equipped gadget. Gated by remaining charges + a per-gadget re-deploy cooldown.
+// Aimed gadgets deploy toward the turret; movement ones toward the drive direction.
+function deployGadget(){
+  const g=run.gadget; if(!g) return;
+  const now=performance.now();
+  if(run.gadgetCharges<=0 || now<run.gadgetCdUntil) return;
+  const mp=activePointer('move'), kb=kbMoveDir();
+  const moveDir = kb!=null ? kb : (mp ? stickVec(mp).ang : tank.turretAngle);
+  const dir = g.dir==='move' ? moveDir : tank.turretAngle;
+  run.gadgetCharges--; run.gadgetCdUntil = now + (g.cd||GADGET_CD);
+  switch(g.id){
+    case 'sentryTeal':  deploySentry('teal',   dir); break;
+    case 'sentryGrey':  deploySentry('grey',   dir); break;
+    case 'trophy':      deploySentry('trophy', dir); break;
+    case 'shield':      deployShield(dir);            break;
+    case 'spiderMines': deploySpiderMines();          break;
+    case 'dash':        doDash(dir);                  break;
+    case 'jumpJets':    doJumpJets();                 break;
+    case 'stealth':     doStealth();                  break;
+  }
+  SFX.deploy(); updateHud();
+}
+// --- gadget effects ---
+// Sentry turrets: a small player-team auto-gun (teal=rockets / grey=shells) or a trophy point-defense.
+// Placed a little ahead of you, clamped inside the arena. Destroyable; expires after TURRET_LIFE.
+function deploySentry(kind,dir){
+  const x=Math.max(FRAME+12,Math.min(W-FRAME-12, tank.x+Math.cos(dir)*30));
+  const y=Math.max(FRAME+12,Math.min(H-FRAME-12, tank.y+Math.sin(dir)*30));
+  turrets.push({ x,y, r:11, hp:TURRET_HP, team:'player', kind, turretAngle:dir, lastFire:0,
+                 expire:performance.now()+TURRET_LIFE });
+}
+function fireTurret(tu){
+  const now=performance.now();
+  const cd = tu.kind==='teal'?1400:900, speed = tu.kind==='teal'?470:310, rocket = tu.kind==='teal';
+  if(now-(tu.lastFire||0)<cd) return;
+  let own=0; for(const s of shells) if(s.owner===tu) own++; if(own>=2) return;
+  tu.lastFire=now;
+  const a=tu.turretAngle, tx=tu.x+Math.cos(a)*(tu.r+8), ty=tu.y+Math.sin(a)*(tu.r+8);
+  shells.push({x:tx,y:ty,vx:Math.cos(a)*speed,vy:Math.sin(a)*speed,b:rocket?0:1,life:3,arm:0.16,team:'player',owner:tu,rocket});
+  SFX.turretFire();
+}
+// One-way shield: a frontal arc placed ahead of you that reflects ENEMY shells coming into its front,
+// but lets your own (player/turret) shells pass straight through. Expires after SHIELD_LIFE.
+function deployShield(dir){
+  const d=cellPx()*0.7;
+  const x=Math.max(FRAME+8,Math.min(W-FRAME-8, tank.x+Math.cos(dir)*d));
+  const y=Math.max(FRAME+8,Math.min(H-FRAME-8, tank.y+Math.sin(dir)*d));
+  shields.push({x,y,r:SHIELD_R,ang:dir,expire:performance.now()+SHIELD_LIFE});
+}
+// Spider mines: a small cluster spawned around you that crawls toward the nearest enemy and blows.
+function deploySpiderMines(){
+  for(let i=0;i<SPIDER_COUNT;i++){ const a=Math.random()*Math.PI*2, d=14+Math.random()*16;
+    spiderMines.push({x:tank.x+Math.cos(a)*d, y:tank.y+Math.sin(a)*d, r:5, arm:0.4, dead:false}); }
+}
+function spiderDetonate(m){
+  if(m.dead) return; m.dead=true;
+  SFX.mineBoom(); burst(m.x,m.y,'#d8c46a',16); if(cfg.shake) shake=Math.min(shake+6,11);
+  const blast=40;
+  if(near(tank,m,blast)) damageTank(tank,1);                                  // FF: your own mine can clip you
+  for(const e of [...enemies]){ if(!e.spawning && near(e,m,blast)) damageTank(e,1); }
+}
+// Dash: blink along `dir` up to DASH_DIST, stopping before any wall/hole; brief i-frames.
+function doDash(dir){
+  const steps=12, sx=tank.x, sy=tank.y; let lx=sx, ly=sy;
+  for(let i=1;i<=steps;i++){
+    const t=i/steps;
+    const cx=Math.max(FRAME+tank.r,Math.min(W-FRAME-tank.r, sx+Math.cos(dir)*DASH_DIST*t));
+    const cy=Math.max(FRAME+tank.r,Math.min(H-FRAME-tank.r, sy+Math.sin(dir)*DASH_DIST*t));
+    if(moveBlockedAt(cx,cy,tank.r-2)) break;     // don't blink into terrain
+    lx=cx; ly=cy;
+  }
+  for(let i=0;i<10;i++){ const t=i/10; particles.push({x:sx+(lx-sx)*t,y:sy+(ly-sy)*t,vx:0,vy:0,life:0.25,c:'#bfe9ff'}); }
+  tank.x=lx; tank.y=ly; pushOutTerrain(tank);
+  tank.iframes = performance.now()+DASH_IFRAMES;
+  SFX.dash();
+}
+// Jump jets: airborne for JET_MS — no hits, cross holes & walls (terrain push is gated while flying;
+// once you land, the normal pushOutTerrain shoves you onto clear floor = the "slide off").
+function doJumpJets(){ tank.flying = performance.now()+JET_MS; SFX.jet(); }
+// Stealth: enemies lose your track until you fire or STEALTH_MS elapses (see playerCloaked + enemy gates).
+function doStealth(){ tank.cloak = performance.now(); SFX.cloak(); }
+// --- gadget/entity per-frame updaters ---
+function updateTurrets(dt,now){
+  for(let i=turrets.length-1;i>=0;i--){
+    const tu=turrets[i]; if(!tu) continue;       // guard against a mid-loop wave-clear wiping the array
+    if(now>=tu.expire || tu.hp<=0){ burst(tu.x,tu.y,tu.hp<=0?'#c96':'#9ab',12); if(tu.hp<=0) SFX.explode(); turrets.splice(i,1); continue; }
+    if(tu.kind==='trophy'){
+      // point-defense: vaporize enemy shells that enter the trophy's radius
+      for(let j=shells.length-1;j>=0;j--){ const s=shells[j]; if(!s||s.team!=='enemy') continue;
+        if(Math.hypot(s.x-tu.x,s.y-tu.y)<TROPHY_R){ burst(s.x,s.y,'#bfe9ff',6); shells.splice(j,1); SFX.trophy(); } }
+      continue;
+    }
+    // sentry: slew onto the nearest enemy + fire when lined up
+    let near=null,nd=1e9;
+    for(const e of enemies){ if(e.spawning) continue; const d=Math.hypot(e.x-tu.x,e.y-tu.y); if(d<nd){nd=d;near=e;} }
+    if(near){
+      const a=Math.atan2(near.y-tu.y,near.x-tu.x);
+      const d=((a-tu.turretAngle+Math.PI)%(2*Math.PI))-Math.PI; tu.turretAngle+=d*0.12;
+      if(Math.abs(d)<0.2) fireTurret(tu);
+    }
+  }
+}
+function updateShields(dt,now){ for(let i=shields.length-1;i>=0;i--) if(now>=shields[i].expire) shields.splice(i,1); }
+function updateSpiderMines(dt,now){
+  for(let i=spiderMines.length-1;i>=0;i--){
+    const m=spiderMines[i]; if(!m) continue;     // a kill→finishWave→beginWave can wipe the array mid-loop
+    if(m.dead){ spiderMines.splice(i,1); continue; }
+    if(m.arm>0) m.arm-=dt;
+    let near=null,nd=1e9;
+    for(const e of enemies){ if(e.spawning) continue; const d=Math.hypot(e.x-m.x,e.y-m.y); if(d<nd){nd=d;near=e;} }
+    if(near){
+      const a=Math.atan2(near.y-m.y,near.x-m.x);
+      m.x+=Math.cos(a)*SPIDER_SPEED*dt; m.y+=Math.sin(a)*SPIDER_SPEED*dt; pushOutTerrain(m);
+      if(m.arm<=0 && nd<near.r+10){ spiderDetonate(m); spiderMines.splice(i,1); }
+    }
+  }
+}
+// Vibranium: while charged (after surviving a hit) you ram enemies for heavy contact damage,
+// which discharges you. Run before resolveTankCollisions, while overlaps still exist.
+function updateVibranium(){
+  if(!tank.charged) return;
+  for(const e of enemies){ if(e.spawning) continue;
+    if(Math.hypot(tank.x-e.x,tank.y-e.y) < tank.r+e.r){
+      damageTank(e, VIBRANIUM_DMG); tank.charged=false;
+      burst(tank.x,tank.y,'#9fd8ff',18); if(cfg.shake) shake=Math.min(shake+7,12); SFX.explode();
+      break;
+    }
+  }
+}
+
+// Raw muzzle: spawn one shell from `t` along `aim` (no cooldown/capacity gate) + a
+// muzzle-spark puff. Player shells carry the Piercing Rounds count (run.mods.pierce).
+const SPREAD_ARC=0.13;   // rad between Scattergun pellets
+function emitShell(t, aim){
+  const isP=(t===tank);
+  const speed  = isP? pShell()  : (t.shellSpeed?? cfg.shell);
+  const bounce = isP? pBounce() : (t.bounce    ?? cfg.bounce);
+  const tipX=t.x+Math.cos(aim)*(t.r+10), tipY=t.y+Math.sin(aim)*(t.r+10);
+  const sh={x:tipX,y:tipY,vx:Math.cos(aim)*speed,vy:Math.sin(aim)*speed,b:bounce,life:3.2,arm:0.16,team:t.team,owner:t,rocket:!!t.rocket};
+  if(isP && run.mods.pierce>0){ sh.pierce=run.mods.pierce; sh.hitSet=new Set(); }   // punch-through bookkeeping
+  if(isP && run.mods.bounceRocket>0) sh.bounceRocket=1;                              // converts to a homing rocket on its first bounce
+  shells.push(sh);
+  for(let i=0;i<6;i++){const sp=60+Math.random()*120,ang=aim+(Math.random()-0.5)*0.7;
+    particles.push({x:tipX,y:tipY,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,life:0.25,c:'#e8b24a'});}
+}
+// Generic fire: any tank shoots along `aim`. Gated by cooldown + own-shell cap, then
+// emits the muzzle. Player Scattergun fans extra pellets from the one trigger pull
+// (the side pellets bypass the cap — they're part of the same shot). Returns whether it fired.
 function fire(t, aim){
   const now=performance.now();
   const isP=(t===tank);
   const cd        = isP? pCd()        : (t.cd        ?? cfg.cd);
   const maxShells = isP? pMaxShells() : (t.maxShells ?? cfg.maxshell);
-  const speed     = isP? pShell()     : (t.shellSpeed?? cfg.shell);
-  const bounce    = isP? pBounce()    : (t.bounce    ?? cfg.bounce);
-  if(now-(t.lastFire||0) < cd) return;
+  if(now-(t.lastFire||0) < cd) return false;
   let own=0; for(const s of shells) if(s.owner===t) own++;
-  if(own>=maxShells) return;
+  if(own>=maxShells) return false;
   t.lastFire=now;
-  const tipX=t.x+Math.cos(aim)*(t.r+10);
-  const tipY=t.y+Math.sin(aim)*(t.r+10);
-  shells.push({x:tipX,y:tipY,vx:Math.cos(aim)*speed,vy:Math.sin(aim)*speed,b:bounce,life:3.2,arm:0.16,team:t.team,owner:t,rocket:!!t.rocket});
-  for(let i=0;i<6;i++){const sp=60+Math.random()*120,ang=aim+(Math.random()-0.5)*0.7;
-    particles.push({x:tipX,y:tipY,vx:Math.cos(ang)*sp,vy:Math.sin(ang)*sp,life:0.25,c:'#e8b24a'});}
+  const pellets = isP ? 1+2*run.mods.spread : 1;   // Scattergun: 1→3→5 pellets
+  if(pellets>1){ for(let i=0;i<pellets;i++) emitShell(t, aim + (i-(pellets-1)/2)*SPREAD_ARC); }
+  else emitShell(t, aim);
   SFX.shoot(isP);
   if(t.team==='player'){
     tank.fireSlowUntil = now + cfg.fireSlowMs;   // firing brakes movement briefly
     if(cfg.shake) shake=Math.min(shake+5,9);
     if(cfg.haptics&&navigator.vibrate) navigator.vibrate(18);
   }
+  return true;
 }
-function tryFire(){ fire(tank, tank.turretAngle); }
+function tryFire(){
+  tank.cloak=0;                                   // firing breaks stealth, whatever the gun mode
+  if(run.gunMode==='laser'){ fireLaser(); return; }
+  if(run.gunMode==='wireGuided'){ fireGuided(); return; }
+  fire(tank, tank.turretAngle);
+}
+
+// Laser gun-mode: a hitscan beam from the turret, tracing the real bounce physics up to LASER_RANGE
+// total path (unlimited bounces within range). Damages the FIRST enemy along the path. Longer cd.
+function fireLaser(){
+  const now=performance.now();
+  if(now-(tank.lastFire||0) < pCd()*LASER_CD_MUL) return;
+  tank.lastFire=now; tank.cloak=0;                       // firing breaks stealth
+  const aim=tank.turretAngle, sp=pShell();
+  let g={x:tank.x+Math.cos(aim)*(tank.r+10), y:tank.y+Math.sin(aim)*(tank.r+10), vx:Math.cos(aim)*sp, vy:Math.sin(aim)*sp};
+  const pts=[{x:g.x,y:g.y}]; const STEP=1/240; let dist=0, hitEnemy=null;
+  while(dist<LASER_RANGE){
+    const px=g.x,py=g.y;
+    const r=reflectStep(g,0,0,STEP); g.x=r.x;g.y=r.y;g.vx=r.vx;g.vy=r.vy;
+    dist+=Math.hypot(g.x-px,g.y-py);
+    if(r.hit){ if(r.hitRect&&r.hitRect.crate) damageCrate(r.hitRect); pts.push({x:g.x,y:g.y}); }
+    for(const e of enemies){ if(e.spawning) continue; if(Math.hypot(g.x-e.x,g.y-e.y)<e.r+4){ hitEnemy=e; break; } }
+    if(hitEnemy) break;
+  }
+  pts.push({x:g.x,y:g.y});
+  beams.push({pts,life:0.12,max:0.12});
+  if(hitEnemy) damageTank(hitEnemy,1);
+  SFX.laser();
+  tank.fireSlowUntil=now+cfg.fireSlowMs; if(cfg.shake) shake=Math.min(shake+4,9);
+  if(cfg.haptics&&navigator.vibrate) navigator.vibrate(18);
+}
+
+// Wire-guided missile gun-mode: one slow missile at a time, steered toward the current aim while
+// the player holds the aim input (≈2-cell turn radius); released → it flies straight. Dies on a wall.
+function fireGuided(){
+  const now=performance.now();
+  if(now-(tank.lastFire||0) < pCd()*1.4) return;
+  if(shells.some(s=>s.owner===tank && s.guided)) return;   // only one in the air
+  tank.lastFire=now; tank.cloak=0;
+  const aim=tank.turretAngle, tipX=tank.x+Math.cos(aim)*(tank.r+10), tipY=tank.y+Math.sin(aim)*(tank.r+10);
+  shells.push({x:tipX,y:tipY,vx:Math.cos(aim)*GUIDED_SPEED,vy:Math.sin(aim)*GUIDED_SPEED,b:0,life:5,arm:0.16,
+               team:'player',owner:tank,rocket:true,guided:true,controlled:true});
+  for(let i=0;i<6;i++){const s2=60+Math.random()*120,a2=aim+(Math.random()-0.5)*0.7;
+    particles.push({x:tipX,y:tipY,vx:Math.cos(a2)*s2,vy:Math.sin(a2)*s2,life:0.25,c:'#e8b24a'});}
+  SFX.shoot(true);
+  tank.fireSlowUntil=now+cfg.fireSlowMs; if(cfg.shake) shake=Math.min(shake+4,9);
+}
+
+// Closest enemy within BOUNCE_CONE of a shell's heading (bounce-rocket lock-on).
+function findConeTarget(sh){
+  const heading=Math.atan2(sh.vy,sh.vx); let best=null,bd=1e9;
+  for(const e of enemies){ if(e.spawning) continue;
+    const a=Math.atan2(e.y-sh.y,e.x-sh.x); const d=((a-heading+Math.PI)%(2*Math.PI))-Math.PI;
+    if(Math.abs(d)<=BOUNCE_CONE){ const dist=Math.hypot(e.x-sh.x,e.y-sh.y); if(dist<bd){bd=dist;best=e;} } }
+  return best;
+}
 
 // soft puff dropped behind a moving shell (velocity-feel trail)
 function addSmoke(x,y){
@@ -90,6 +296,7 @@ function wouldFriendlyFire(e, aim){
   return false;
 }
 const STUCK_MS=600;   // ms a tank can be wall/corner-jammed before it switches to idle wander
+let wasDeploy=false;  // deploy-input edge state (rising edge fires the gadget once)
 
 // is the straight segment a→b crossed by an obstacle? (sampled — cheap & good enough)
 function segBlocked(x0,y0,x1,y1){
@@ -144,6 +351,7 @@ function bankAim(e,tx,ty){
 //   'cutoff' = partial lead (aim slightly ahead of the player's path; rushers like Purple).
 //   'predict'= full intercept lead, with a 1-bounce bank fallback around cover (Green).
 function aimFor(e){
+  if(playerCloaked()) return e.turretAngle;     // stealth: enemies can't track you → turret holds
   if(e.aim==='track') return Math.atan2(tank.y-e.y, tank.x-e.x);
   const speed=e.shellSpeed||cfg.shell;
   const lead = e.aim==='cutoff' ? 0.5 : 1;          // cutoff leads only halfway
@@ -185,8 +393,10 @@ function driveEnemy(e, now){
       const sp=e.speed*0.55; e.vx=Math.cos(e.idleHeading)*sp; e.vy=Math.sin(e.idleHeading)*sp;
     } else {
       let dir=null;
-      if(dist>e.engage+20)      dir=Math.atan2(dy,dx);     // approach
-      else if(dist<e.engage-20) dir=Math.atan2(-dy,-dx);   // back off
+      if(!playerCloaked()){                                // stealth: enemies lose your position → coast
+        if(dist>e.engage+20)      dir=Math.atan2(dy,dx);     // approach
+        else if(dist<e.engage-20) dir=Math.atan2(-dy,-dx);   // back off
+      }
       if(dir!==null){ dir=steerDir(e,dir); e.vx=Math.cos(dir)*e.speed; e.vy=Math.sin(dir)*e.speed; }
       else { e.vx*=0.85; e.vy*=0.85; }
     }
@@ -202,7 +412,7 @@ function driveEnemy(e, now){
       e.wanderUntil=now+700+Math.random()*1500;
     }
     let wd=((e.wanderTarget-e.turretAngle+Math.PI)%(2*Math.PI))-Math.PI; e.turretAngle+=wd*0.04;
-    if(now>=e.nextFireAt){ if(!wouldFriendlyFire(e,e.turretAngle)) fire(e, e.turretAngle); scheduleFire(e,now); }
+    if(now>=e.nextFireAt){ if(!playerCloaked() && !wouldFriendlyFire(e,e.turretAngle)) fire(e, e.turretAngle); scheduleFire(e,now); }
   } else {
     const aimAng=aimFor(e);
     let td=((aimAng-e.turretAngle+Math.PI)%(2*Math.PI))-Math.PI; e.turretAngle+=td*0.07;
@@ -214,7 +424,7 @@ function driveEnemy(e, now){
       // OG-style sparse firing: less-lethal types (fireChance<1) coin-flip each ready shot;
       // a declined beat still costs a full fireGap, so effective interval ≈ fireGap/fireChance.
       if(e.fireChance>=1 || Math.random()<e.fireChance){
-        if(!wouldFriendlyFire(e,e.turretAngle)) fire(e, e.turretAngle);
+        if(!playerCloaked() && !wouldFriendlyFire(e,e.turretAngle)) fire(e, e.turretAngle);
       }
       scheduleFire(e,now);
     }
@@ -283,7 +493,7 @@ function resolveTankCollisions(){
     }
   }
   for(const t of tanks){                       // keep everyone out of terrain + frame after shoving
-    pushOutTerrain(t);
+    if(!(t===tank && playerFlying())) pushOutTerrain(t);   // the airborne player passes over terrain
     if(t!==tank && t.entering) continue;        // entering reinforcements aren't frame-clamped yet
     t.x=Math.max(FRAME+t.r,Math.min(W-FRAME-t.r,t.x));
     t.y=Math.max(FRAME+t.r,Math.min(H-FRAME-t.r,t.y));
@@ -370,7 +580,7 @@ function reflectStep(o,nx,ny,dt){
 function update(dt){
   const now=performance.now();
   if(paused) return;                                            // sandbox upgrade overlay
-  if(gameMode==='roguelike' && run.phase==='upgrade') return;   // paused while choosing an upgrade
+  if(gameMode==='roguelike' && run.phase==='shop') return;      // paused while shopping the depot
   const playerDead = gameMode==='roguelike' && run.phase==='dead';
   // ---- player movement (skipped once dead — the wreck just sits while it explodes) ----
   if(!playerDead){
@@ -399,12 +609,15 @@ function update(dt){
       // tank vs frame
       tank.x=Math.max(FRAME+tank.r,Math.min(W-FRAME-tank.r,tank.x));
       tank.y=Math.max(FRAME+tank.r,Math.min(H-FRAME-tank.r,tank.y));
-      // tank vs terrain (blocks + holes both block movement)
-      pushOutTerrain(tank);
+      // tank vs terrain (blocks + holes both block movement) — skipped while jump-jets fly you over
+      if(!playerFlying()) pushOutTerrain(tank);
       trailTank(tank,dt);
       // auto-fire: hold the aim stick past the ring to keep firing on cooldown
       if(cfg.autofire){ const ap=activePointer('aim'); if(ap && stickVec(ap).raw>cfg.rad) tryFire(); }
       if(fireHeld()) tryFire();    // desktop: hold mouse / space to fire (cooldown-gated)
+      const dHeld=deployHeld();    // gadget deploy — edge-triggered so a held input fires once
+      if(dHeld && !wasDeploy) deployGadget();
+      wasDeploy=dHeld;
     }
     // desktop: turret tracks the mouse cursor (recomputed each frame so it stays
     // locked while the tank drives, not just when the mouse moves).
@@ -456,6 +669,7 @@ function update(dt){
   }
   // ---- enemies (inert while warping in) ----
   for(const e of enemies){ if(e.spawning) continue; driveEnemy(e, now); moveEnemy(e, dt); trailTank(e,dt); }
+  updateVibranium();          // charged ram damage (before collisions push tanks apart)
   resolveTankCollisions();    // no stacking — push overlapping tanks apart
 
   // ---- shells ----
@@ -464,17 +678,37 @@ function update(dt){
     if(!sh) continue;        // a kill mid-loop (killEnemy→finishWave→beginWave) can wipe shells[]; skip the holes
     sh.life-=dt; if(sh.life<=0){shells.splice(i,1);continue;}
     sh.arm-=dt;                                   // firer is immune only until the shell arms (no muzzle suicide)
+    // wire-guided steering: while controlled + the player holds aim, curve toward the current aim
+    // at a capped turn rate (≈2-cell radius); release → fly straight from here on.
+    if(sh.guided){
+      const held = !!activePointer('aim') || (mouseAim&&mouseDown) || keys.has('Space');
+      if(sh.controlled && held){
+        const cur=Math.atan2(sh.vy,sh.vx);
+        const d=((tank.turretAngle-cur+Math.PI)%(2*Math.PI))-Math.PI;
+        const omega=(GUIDED_SPEED/GUIDED_TURNRAD)*dt, turn=Math.max(-omega,Math.min(omega,d));
+        const na=cur+turn, spd=Math.hypot(sh.vx,sh.vy);
+        sh.vx=Math.cos(na)*spd; sh.vy=Math.sin(na)*spd;
+      } else sh.controlled=false;
+    }
     const steps=4, sdt=dt/steps; let dead=false;
     for(let k=0;k<steps;k++){
       const r=reflectStep(sh,0,0,sdt); sh.x=r.x;sh.y=r.y;sh.vx=r.vx;sh.vy=r.vy;
       if(r.hit){
         if(r.hitRect && r.hitRect.crate) damageCrate(r.hitRect);
         sh.b--; if(sh.owner===tank) SFX.ricochet(); if(sh.b<0){dead=true;break;}
+        // bounce-propelled rocket: on a surviving bounce, lock the closest enemy in a 45° cone of
+        // the new heading → become a faster, non-bouncing homing rocket aimed straight at it.
+        if(sh.bounceRocket && !sh.converted){
+          const lock=findConeTarget(sh);
+          if(lock){ sh.converted=1; sh.rocket=true; sh.b=0;
+            const spd=Math.hypot(sh.vx,sh.vy)*BOUNCE_ROCKET_MUL, a=Math.atan2(lock.y-sh.y,lock.x-sh.x);
+            sh.vx=Math.cos(a)*spd; sh.vy=Math.sin(a)*spd; }
+        }
       }
       // hit ANY tank — full friendly fire, no teams (bait enemies into each other / your own ricochet)
       let victim=null;
       if((sh.owner!==tank || sh.arm<=0) && Math.hypot(sh.x-tank.x,sh.y-tank.y)<tank.r+4) victim=tank;
-      if(!victim){ for(const e of enemies){ if(e.spawning || (sh.owner===e && sh.arm>0)) continue;
+      if(!victim){ for(const e of enemies){ if(e.spawning || (sh.owner===e && sh.arm>0) || (sh.hitSet && sh.hitSet.has(e))) continue;
         if(Math.hypot(sh.x-e.x,sh.y-e.y)<e.r+4){ victim=e; break; } } }
       if(victim){
         const act = victim.armor ? resolveHit(victim, sh) : 'damage';   // armored (heavy enemy OR Heavy player) reads the face
@@ -499,8 +733,33 @@ function update(dt){
           if(cfg.shake) shake=Math.min(shake+3,9);
           dead=true; break;                                          // shell consumed, no hp loss
         }
-        damageTank(victim,1); dead=true; break;
+        damageTank(victim,1);
+        // Piercing Rounds: the shell punches on through enemy tanks (logging each so it
+        // can't re-hit the same one), spending one pierce per body. Otherwise it dies here.
+        if(sh.pierce>0 && victim!==tank){ sh.pierce--; sh.hitSet.add(victim); }
+        else { dead=true; break; }
       }
+      // one-way shields: reflect ENEMY shells entering the shield's front; player/turret shells pass
+      if(!dead && shields.length && sh.team==='enemy'){
+        for(const sd of shields){
+          const dx=sh.x-sd.x, dy=sh.y-sd.y;
+          if(dx*dx+dy*dy < sd.r*sd.r){
+            const movingIn = sh.vx*(-dx)+sh.vy*(-dy) > 0;                         // heading into the shield
+            const frontSide = dx*Math.cos(sd.ang)+dy*Math.sin(sd.ang) > 0;         // on the facing side
+            if(movingIn && frontSide){
+              const nl=Math.hypot(dx,dy)||1, ux=dx/nl, uy=dy/nl, dot=sh.vx*ux+sh.vy*uy;
+              sh.vx-=2*dot*ux; sh.vy-=2*dot*uy; sh.x=sd.x+ux*(sd.r+3); sh.y=sd.y+uy*(sd.r+3);
+              burst(sh.x,sh.y,'#7fdfff',6); SFX.ricochet(); break;
+            }
+          }
+        }
+      }
+      // deployed turrets are destroyable by any shell that isn't their own
+      if(!dead && turrets.length){
+        for(const tu of turrets){ if(sh.owner===tu) continue;
+          if(Math.hypot(sh.x-tu.x,sh.y-tu.y)<tu.r+4){ tu.hp--; burst(sh.x,sh.y,'#9ab',8); if(sh.owner===tank) SFX.hit(); dead=true; break; } }
+      }
+      if(dead)break;
       // any shell detonates a mine it touches
       for(const m of mines){ if(!m.dead && Math.hypot(sh.x-m.x,sh.y-m.y)<10){ detonate(m); dead=true; break; } }
       if(dead)break;
@@ -515,6 +774,9 @@ function update(dt){
   }
   // mines
   updateMines(dt);
+  // player deployables (sentries / trophy / shields / spider mines) + transient laser beams
+  updateTurrets(dt,now); updateShields(dt,now); updateSpiderMines(dt,now);
+  for(let i=beams.length-1;i>=0;i--){ beams[i].life-=dt; if(beams[i].life<=0) beams.splice(i,1); }
   // crate pickups (heal / upgrade) — float on the floor until grabbed or they fade
   updatePickups(dt);
   // siege objective: capture → hold the point while reinforcements pour in
@@ -555,7 +817,11 @@ function resolveHit(victim, sh){
 function damageTank(t, dmg){
   if(t.team==='player'){
     if(gameMode==='roguelike'){
-      if(run.phase==='dead' || run.phase==='upgrade') return;   // already gone / wave already won
+      if(run.phase==='dead' || run.phase==='shop') return;      // already gone / wave already won (shopping)
+      if(playerFlying() || performance.now()<tank.iframes) return;   // jump-jets airborne / dash i-frames: untouchable
+      if(run.vibranium && !tank.charged){                       // Vibranium: survive the hit, charge up (now vulnerable until you ram)
+        tank.charged=true; burst(t.x,t.y,'#9fd8ff',16); if(cfg.shake) shake=Math.min(shake+5,10); SFX.hit(); return;
+      }
       onPlayerDeath();                     // any hit is lethal → lose a life, retry the wave
     } else {                               // sandbox player is immortal (feedback only)
       burst(t.x,t.y,'#ffffff',12);
@@ -578,7 +844,8 @@ function killEnemy(e){
   if(cfg.shake) shake=Math.min(shake+6,11);
   if(cfg.haptics&&navigator.vibrate) navigator.vibrate([12,28,12]);
   if(gameMode==='roguelike'){ run.kills++;
-    pickups.push({x:e.x,y:e.y,kind:'scrap',value:1,life:SCRAP_LIFE,max:SCRAP_LIFE});  // drop scrap to go collect
+    if(e.boss){ burst(e.x,e.y,'#e8c84a',26); if(cfg.shake) shake=Math.min(shake+8,13); }
+    pickups.push({x:e.x,y:e.y,kind:'scrap',value:e.boss?6:1,life:SCRAP_LIFE,max:SCRAP_LIFE});  // boss drops a fat scrap pile
     updateHud();
     if(enemies.length===0){
       if(run.siege){ if(run.siege.phase==='assault') capturePoint(); }   // fortress cleared → start the hold
@@ -657,7 +924,9 @@ function finishWave(){
   let got=0;
   for(let i=pickups.length-1;i>=0;i--) if(pickups[i].kind==='scrap'){ run.scrap+=pickups[i].value; got+=pickups[i].value; pickups.splice(i,1); }
   if(got>0){ SFX.hit(); updateHud(); }
-  if(run.scrap>=upgradeCost()) offerUpgrade(); else nextWave();
+  // Scrap banks; a depot opens every few waves (and after every boss) to spend it. Else fight on.
+  if(run.waveKind==='boss' || run.level%SHOP_EVERY===0) openShop();
+  else nextWave();
 }
 function updateSiege(dt, now){
   if(!run.siege || run.phase!=='fighting' || run.siege.phase!=='hold') return;

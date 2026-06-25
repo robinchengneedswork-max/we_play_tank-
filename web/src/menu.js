@@ -41,7 +41,7 @@ async function startMode(m, classKey){
 
 function toMenu(){
   started=false; gameMode=null; paused=false;
-  ['gameover','sbUp','upgrade'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  ['gameover','sbUp','shop'].forEach(id=>document.getElementById(id).classList.remove('active'));
   hud.classList.add('hud-hidden');
   showScreen('screen-menu');   // stay in fullscreen so re-entering a mode is instant
 }

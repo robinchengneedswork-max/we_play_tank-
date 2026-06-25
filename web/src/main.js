@@ -8,6 +8,7 @@ function resize(){
   cv.style.width=W+'px'; cv.style.height=H+'px';
   ctx.setTransform(DPR,0,0,DPR,0,0);
   fireBtn.x=W-58; fireBtn.y=64; fireBtn.r=40;
+  deployBtn.x=58; deployBtn.y=64; deployBtn.r=36;   // left index — gadget deploy
   projectMap();             // re-bake the current map's collision rects at the new size
 }
 window.addEventListener('resize',resize);

@@ -62,6 +62,28 @@ Current engine is **realtime twin-stick**, so the scaffolded roguelike leans *Nu
 (realtime) — *Into the Breach* (turn-based grid) would be a different engine; revisit before building
 deep run mechanics. The run/upgrade meta-structure is engine-agnostic and lives ahead of that choice.
 
+### Progression, depot economy & rulebreaker arsenal (web/)
+The roguelike run has a designed arc + an FTL-style shop + a deep rulebreaker set. All headless-
+verified, **not yet browser-playtested** — every number is a tuning guess.
+- **Run arc** (`state.js` `waveKindFor`): every 10th wave = **boss** (a big armored `boss` TYPE,
+  flank/rocket it), every 5th = **elite** (beefed roster). Boss/elite force a warp map; banner in the
+  countdown (`render.js`).
+- **Supply Depot** (`ui.js` `openShop/renderShop`, opens every 3 waves + after a boss; scrap BANKS):
+  à-la-carte stat lines with **per-line escalating cost** (`SHOP_STOCK`/`shopLineCost`), a
+  **weight↔engine** tradeoff folded into `pMove` (`weightMoveMul`), Repair / Extra-Life / **Rearm**
+  consumables, and **2 rolled rulebreakers** per visit (`rollShopRulebreakers`).
+- **Rulebreakers** (`UPGRADES`, tier `'rulebreaker'`) come in two equip slots **plus** stacking
+  passives:
+  - **Passives** (stack): Armor Plating, Piercing Rounds, Scattergun, **Vibranium Plate** (survive a
+    hit → charged + faster → ram to discharge; vulnerable while charged — fully automatic, NO input).
+  - **Gun-mode** slot (`run.gunMode`, replaces the gun): Laser (hitscan), Wire-Guided Missiles,
+    Bounce Rockets (passive shell mod). Branch in `tryFire()`.
+  - **Gadget** slot (`run.gadget`, `GADGETS` table, **charge-based**): Rocket/Gun Sentries, Trophy
+    System, One-way Shield, Spider Mines, Dash, Jump Jets, Stealth. Deployed via the **deploy input**
+    — left on-screen deploy button OR shove the move stick past its ring OR `Q`/right-click
+    (edge-detected `deployGadget`). Player-deployed entities live in `turrets/shields/spiderMines[]`.
+- Slots are independent: a run can carry one gun-mode + one gadget + any passives at once.
+
 ## Current state of the repo
 
 - `reference/tank-controller-test.html` — the **proven single-file feel-test**. It already nails

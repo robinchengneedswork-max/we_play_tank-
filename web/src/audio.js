@@ -37,4 +37,12 @@ const SFX={
   electric(){ tone('sawtooth',1100,120,0.34,0.16); noise(0.34,0.10,2600,'bandpass'); },  // White cloaking zap
   mineLay(){ tone('square',440,300,0.07,0.10); },
   mineBoom(){ tone('sawtooth',190,40,0.5,0.22); noise(0.5,0.28,420,'lowpass'); },
+  // ---- arsenal SFX ----
+  deploy(){ tone('square',300,520,0.10,0.09); },                                  // gadget deployed
+  laser(){ tone('sawtooth',1400,420,0.12,0.10); noise(0.12,0.05,3000,'bandpass'); }, // laser zap
+  dash(){ tone('triangle',520,1100,0.10,0.09); },                                 // blink
+  jet(){ tone('sawtooth',220,520,0.30,0.10); noise(0.30,0.10,1600,'bandpass'); }, // jump-jet thrust
+  cloak(){ tone('sine',900,180,0.30,0.10); },                                     // stealth shimmer
+  turretFire(){ tone('square',360,150,0.05,0.04); },                              // sentry shot (lighter than the player gun)
+  trophy(){ tone('triangle',1600,700,0.04,0.06); },                              // trophy intercept
 };
