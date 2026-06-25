@@ -48,16 +48,33 @@ function addSmoke(x,y){
 
 // ---- enemy AI ----
 function scheduleFire(e,now){ e.nextFireAt = now + e.fireGap[0] + Math.random()*(e.fireGap[1]-e.fireGap[0]); }
-// Basic fire discipline: would a shot along `aim` immediately pass through a teammate?
-// (Ricochet friendly fire is still possible — that's the Wii flavor — but no point-blank
-// teammate kills.) Projects each ally onto the aim ray; hold fire if one is in the lane.
-function allyInLineOfFire(e, aim){
-  const cx=Math.cos(aim), cy=Math.sin(aim);
-  for(const o of enemies){
-    if(o===e || o.spawning) continue;
-    const dx=o.x-e.x, dy=o.y-e.y, t=dx*cx+dy*cy;     // distance along the aim ray
-    if(t<=0 || t>320) continue;                       // behind us or too far to matter
-    if(Math.abs(dx*cy-dy*cx) < o.r+7) return true;    // within the ally's width of the lane
+// Predictive fire discipline: march a virtual shell along `aim` through the REAL
+// bounce physics (reflectStep) and refuse the shot if it would hit a teammate or
+// loop back into us. Two things the old straight-line check missed: shells bounce
+// (an ally/self can be hit after a wall), and the firer is only immune until the
+// shell arms — so a shot fired next to a wall comes straight back and suicides.
+//
+// We deliberately KEEP the "bait enemies into each other" flavor: allies standing
+// FARTHER than the player (i.e. behind them along the shot) are fair game — the
+// player can still juke a shot meant for them into a tank behind. Only allies in
+// front of the player (blocking the lane) and self-returns are spared.
+function wouldFriendlyFire(e, aim){
+  const speed=e.shellSpeed||cfg.shell;
+  const distToPlayer=Math.hypot(tank.x-e.x, tank.y-e.y);
+  const sim={ x:e.x+Math.cos(aim)*(e.r+10), y:e.y+Math.sin(aim)*(e.r+10),
+              vx:Math.cos(aim)*speed, vy:Math.sin(aim)*speed };
+  let b=(e.bounce??cfg.bounce), elapsed=0, travel=0;
+  const STEP=0.016, HORIZON=1.2;                       // ~1.2s of near-term flight
+  while(elapsed<HORIZON){
+    const px=sim.x, py=sim.y;
+    const r=reflectStep(sim,0,0,STEP); sim.x=r.x; sim.y=r.y; sim.vx=r.vx; sim.vy=r.vy;
+    travel+=Math.hypot(sim.x-px, sim.y-py); elapsed+=STEP;
+    if(r.hit && --b<0) break;                           // ran out of bounces
+    // never volunteer a shot that loops back through yourself (only once it's armed)
+    if(elapsed>0.16 && Math.hypot(sim.x-e.x, sim.y-e.y)<e.r+5) return true;
+    // an ally closer than the player blocks the lane → spare it; one behind is bait
+    for(const o of enemies){ if(o===e || o.spawning) continue;
+      if(travel<distToPlayer+24 && Math.hypot(sim.x-o.x, sim.y-o.y)<o.r+5) return true; }
   }
   return false;
 }
@@ -161,11 +178,11 @@ function driveEnemy(e, now){
       e.wanderUntil=now+700+Math.random()*1500;
     }
     let wd=((e.wanderTarget-e.turretAngle+Math.PI)%(2*Math.PI))-Math.PI; e.turretAngle+=wd*0.04;
-    if(now>=e.nextFireAt){ if(!allyInLineOfFire(e,e.turretAngle)) fire(e, e.turretAngle); scheduleFire(e,now); }
+    if(now>=e.nextFireAt){ if(!wouldFriendlyFire(e,e.turretAngle)) fire(e, e.turretAngle); scheduleFire(e,now); }
   } else {
     const aimAng=aimFor(e);
     let td=((aimAng-e.turretAngle+Math.PI)%(2*Math.PI))-Math.PI; e.turretAngle+=td*0.07;
-    if(now>=e.nextFireAt){ if(!allyInLineOfFire(e,e.turretAngle)) fire(e, e.turretAngle); scheduleFire(e,now); }
+    if(now>=e.nextFireAt){ if(!wouldFriendlyFire(e,e.turretAngle)) fire(e, e.turretAngle); scheduleFire(e,now); }
   }
   // mine-layers drop mines on a timer while on the move (up to their `mines` cap)
   if(e.mines>0 && e.speed>0 && now>=e.nextMineAt){
@@ -302,6 +319,7 @@ function update(dt){
   const playerDead = gameMode==='roguelike' && run.phase==='dead';
   // ---- player movement (skipped once dead — the wreck just sits while it explodes) ----
   if(!playerDead){
+    const prevBody=tank.bodyAngle;               // to carry the turret along with hull rotation (below)
     // frozen during the warp-in countdown — the player can't move before the wave goes live
     const inWarmup = gameMode==='roguelike' && run.phase==='intermission';
     if(inWarmup){
@@ -334,6 +352,14 @@ function update(dt){
     // desktop: turret tracks the mouse cursor (recomputed each frame so it stays
     // locked while the tank drives, not just when the mouse moves).
     if(mouseAim && !activePointer('aim')) tank.aimTarget=Math.atan2(mouseY-tank.y, mouseX-tank.x);
+    // no active aim input → keep the gun fixed RELATIVE to the hull, so it rides
+    // along as you steer instead of holding a fixed compass heading. (Mouse aim is
+    // absolute and latches `mouseAim`, so this only affects twin-stick / keyboard.)
+    const aimingNow = !!activePointer('aim') || mouseAim;
+    if(!aimingNow && tank.aimTarget!==undefined){
+      const bodyDelta=((tank.bodyAngle-prevBody+Math.PI)%(2*Math.PI))-Math.PI;
+      tank.aimTarget+=bodyDelta;
+    }
     // turret aim — Tank Destroyer's gun is limited to a frontal arc; when you aim
     // past it, the hull swings to follow (unless you're actively driving).
     if(tank.aimTarget!==undefined){
