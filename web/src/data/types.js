@@ -15,6 +15,10 @@
 //   invisible   render near-transparent (M3 — partial: dimmed render only)
 //   fireGap     [min,max] ms between fire *attempts*
 //   hp, r       hit points, body radius
+//   armor       (optional) directional armor — shots resolve by which face they hit, vs bodyAngle:
+//               { frontArc, rearArc } sector half-widths (rad); deflect: front bounces NON-rocket
+//               shells back (rockets penetrate); tracks: first side hit breaks the track —
+//               absorbed (no hp), immobilizes permanently, then that side takes normal damage.
 
 const TYPES = {
   brown:  { color:'#9b7b4a', speed:0,   shellSpeed:310, bounce:1, cd:1600, maxShells:1, rocket:false, aim:'none',    engage:9999, mines:0, invisible:false, fireGap:[2600,4200], hp:1, r:16 },
@@ -26,4 +30,6 @@ const TYPES = {
   purple: { color:'#8a5cc0', speed:150, shellSpeed:310, bounce:1, cd:420,  maxShells:5, rocket:false, aim:'cutoff',  engage:160,  mines:2, invisible:false, fireGap:[400,750],   hp:1, r:16 },
   white:  { color:'#d8d2c2', speed:110, shellSpeed:310, bounce:1, cd:520,  maxShells:5, rocket:false, aim:'track',   engage:180,  mines:2, invisible:true,  fireGap:[450,850],   hp:1, r:16 },
   black:  { color:'#3a3732', speed:185, shellSpeed:470, bounce:0, cd:620,  maxShells:2, rocket:true,  aim:'track',   engage:120,  mines:2, invisible:false, fireGap:[550,950],   hp:2, r:16 },
+  heavy:  { color:'#6b7079', speed:55,  shellSpeed:310, bounce:1, cd:1400, maxShells:1, rocket:false, aim:'track',   engage:200,  mines:0, invisible:false, fireGap:[1800,2800], hp:3, r:19,
+            armor:{ frontArc:Math.PI*0.30, rearArc:Math.PI*0.30, deflect:true, tracks:true } },
 };

@@ -160,7 +160,8 @@ function driveEnemy(e, now){
   }
   const dx=tank.x-e.x, dy=tank.y-e.y, dist=Math.hypot(dx,dy)||1;
   // movement: hold a band around `engage`, steering around cover to reach it
-  if(e.speed>0){
+  if(e.immobile){ e.vx=0; e.vy=0; }            // track-broken: dead in the water, but turret still hunts
+  else if(e.speed>0){
     let dir=null;
     if(dist>e.engage+20)      dir=Math.atan2(dy,dx);     // approach
     else if(dist<e.engage-20) dir=Math.atan2(-dy,-dx);   // back off
@@ -411,7 +412,25 @@ function update(dt){
       if((sh.owner!==tank || sh.arm<=0) && Math.hypot(sh.x-tank.x,sh.y-tank.y)<tank.r+4) victim=tank;
       if(!victim){ for(const e of enemies){ if(e.spawning || (sh.owner===e && sh.arm>0)) continue;
         if(Math.hypot(sh.x-e.x,sh.y-e.y)<e.r+4){ victim=e; break; } } }
-      if(victim){ damageTank(victim,1); dead=true; break; }
+      if(victim){
+        const act = victim.team==='player' ? 'damage' : resolveHit(victim, sh);
+        if(act==='deflect'){
+          // bounce the shell off the glacis plate (reflect about the hull normal, like a wall)
+          const nx=sh.x-victim.x, ny=sh.y-victim.y, nl=Math.hypot(nx,ny)||1, ux=nx/nl, uy=ny/nl;
+          const dot=sh.vx*ux+sh.vy*uy; sh.vx-=2*dot*ux; sh.vy-=2*dot*uy;
+          sh.x=victim.x+ux*(victim.r+6); sh.y=victim.y+uy*(victim.r+6);   // nudge clear so it doesn't re-hit
+          sh.b--; if(sh.owner===tank) SFX.ricochet();
+          burst(sh.x,sh.y,'#cfd3d8',6);
+          if(sh.b<0) dead=true;                       // spent its bounces → fizzle; else it flies on (maybe back at you)
+          break;
+        } else if(act==='absorb'){
+          victim.trackBroken=true; victim.immobile=true;            // mobility-killed, this side now vulnerable
+          burst(sh.x,sh.y,victim.color,8); SFX.hit();
+          if(cfg.shake) shake=Math.min(shake+3,9);
+          dead=true; break;                                          // shell consumed, no hp loss
+        }
+        damageTank(victim,1); dead=true; break;
+      }
       // any shell detonates a mine it touches
       for(const m of mines){ if(!m.dead && Math.hypot(sh.x-m.x,sh.y-m.y)<10){ detonate(m); dead=true; break; } }
       if(dead)break;
@@ -445,6 +464,18 @@ function update(dt){
 function burst(x,y,color,n){
   for(let i=0;i<n;i++){const sp=80+Math.random()*200,a=Math.random()*Math.PI*2;
     particles.push({x,y,vx:Math.cos(a)*sp,vy:Math.sin(a)*sp,life:0.4,c:color});}
+}
+// Directional armor (heavy): which face did `sh` strike, and what happens?
+// Returns 'deflect' (front bounces a non-rocket back), 'absorb' (track break — no hp,
+// immobilize), or 'damage'. Unarmored tanks (incl. the player) always take 'damage'.
+function resolveHit(victim, sh){
+  const a=victim.armor; if(!a) return 'damage';
+  const rel=Math.abs(((Math.atan2(sh.y-victim.y, sh.x-victim.x) - victim.bodyAngle + Math.PI)%(2*Math.PI))-Math.PI);
+  const front = rel <= a.frontArc;
+  const rear  = rel >= Math.PI - a.rearArc;
+  if(front && a.deflect && !sh.rocket) return 'deflect';       // glacis turns a normal shell; rockets punch through
+  if(!front && !rear && a.tracks && !victim.trackBroken) return 'absorb';  // first side hit kills mobility
+  return 'damage';                                             // rear, rocket-to-front, or an already-broken side
 }
 function damageTank(t, dmg){
   if(t.team==='player'){

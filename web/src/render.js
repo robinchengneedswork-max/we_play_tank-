@@ -42,9 +42,11 @@ function darken(hex,f){
 function drawTank(t,col,colDark){
   ctx.save();ctx.translate(t.x,t.y);
   ctx.save();ctx.rotate(t.bodyAngle);
-  ctx.fillStyle=colDark;ctx.fillRect(-t.r-2,-t.r+1,t.r*2+4,5);
+  const treadCol = t.immobile ? '#7a3b32' : colDark;   // broken track reads red
+  ctx.fillStyle=treadCol;ctx.fillRect(-t.r-2,-t.r+1,t.r*2+4,5);
   ctx.fillRect(-t.r-2,t.r-6,t.r*2+4,5);
   ctx.fillStyle=col;ctx.fillRect(-t.r,-t.r+3,t.r*2,t.r*2-6);
+  if(t.armor){ ctx.fillStyle=colDark;ctx.fillRect(t.r-4,-t.r+1,6,t.r*2-2); }  // front glacis plate
   ctx.restore();
   // turret
   ctx.rotate(t.turretAngle);

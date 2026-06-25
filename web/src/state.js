@@ -64,6 +64,7 @@ function spawnEnemy(typeName, x, y){
     x, y, r:t.r, vx:0, vy:0,
     bodyAngle:Math.random()*Math.PI*2, turretAngle:Math.random()*Math.PI*2, aimTarget:0,
     hp:t.hp, maxHp:t.hp,
+    armor:t.armor||null, trackBroken:false, immobile:false,   // heavy: directional armor + track break
     // per-tank combat stats (fire() reads these; players have none → cfg fallback)
     speed:t.speed, shellSpeed:t.shellSpeed, bounce:t.bounce, cd:t.cd, maxShells:t.maxShells,
     rocket:t.rocket, aim:t.aim, engage:t.engage, mines:t.mines, invisible:t.invisible,
@@ -168,15 +169,17 @@ const WAVES=[
   ['red','red','green','teal','teal'],
   ['yellow','yellow','red','red','green'],            // wave 6: mines arrive
   ['purple','red','red','green','green','teal'],
+  ['heavy','grey','grey','red','green'],              // wave 8: the heavy arrives
 ];
 function waveRoster(level){
   if(level<WAVES.length) return WAVES[level].slice();
-  // 8+: procedural escalation; introduce White then Black, cap ~12
-  const pool=['grey','teal','red','green','purple','yellow','white','black'];
+  // 9+: procedural escalation; introduce White, Black, then Heavy, cap ~12
+  const pool=['grey','teal','red','green','purple','yellow','white','black','heavy'];
   const n=Math.min(6+(level-7),12);
   const out=[]; for(let i=0;i<n;i++) out.push(pool[Math.floor(Math.random()*pool.length)]);
-  if(level>=8 && !out.includes('white')) out[0]='white';
-  if(level>=9 && !out.includes('black')) out[1]='black';
+  if(level>=9 && !out.includes('white')) out[0]='white';
+  if(level>=10 && !out.includes('black')) out[1]='black';
+  if(level>=11 && !out.includes('heavy')) out[2]='heavy';
   return out;
 }
 // Load a fresh map, spawn the level's wave (warp-in or off-screen siege per the
