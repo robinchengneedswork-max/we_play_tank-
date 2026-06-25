@@ -48,6 +48,8 @@ function addSmoke(x,y){
 
 // ---- enemy AI ----
 function scheduleFire(e,now){ e.nextFireAt = now + e.fireGap[0] + Math.random()*(e.fireGap[1]-e.fireGap[0]); }
+const FIRE_ALIGN_TOL=0.14;   // rad (~8°): an aiming tank won't fire until its turret is actually on target
+const SPAWN_FIRE_DELAY=550;  // ms after a wave goes live before anyone may fire (turrets settle onto target first)
 // Predictive fire discipline: march a virtual shell along `aim` through the REAL
 // bounce physics (reflectStep) and refuse the shot if it would hit a teammate or
 // loop back into us. Two things the old straight-line check missed: shells bounce
@@ -204,7 +206,14 @@ function driveEnemy(e, now){
   } else {
     const aimAng=aimFor(e);
     let td=((aimAng-e.turretAngle+Math.PI)%(2*Math.PI))-Math.PI; e.turretAngle+=td*0.07;
-    if(now>=e.nextFireAt){ if(!wouldFriendlyFire(e,e.turretAngle)) fire(e, e.turretAngle); scheduleFire(e,now); }
+    // Fire only when due AND the turret has actually swung onto the target — never loose
+    // a shot mid-slew (the cause of fresh-spawn tanks firing in whatever random direction
+    // they happened to point). If due but still slewing, HOLD (don't reschedule) so the
+    // shot goes off the instant we line up.
+    if(now>=e.nextFireAt && Math.abs(td)<FIRE_ALIGN_TOL){
+      if(!wouldFriendlyFire(e,e.turretAngle)) fire(e, e.turretAngle);
+      scheduleFire(e,now);
+    }
   }
   // mine-layers drop mines on a timer while on the move (up to their `mines` cap)
   if(e.mines>0 && e.speed>0 && now>=e.nextMineAt){
@@ -281,7 +290,10 @@ function moveEnemy(e,dt){
   e.x+=e.vx*dt; e.y+=e.vy*dt;
   if(e.entering){
     // siege: no frame clamp until the tank's center crosses into the arena, then clamp normally
-    if(e.x>=FRAME && e.x<=W-FRAME && e.y>=FRAME && e.y<=H-FRAME) e.entering=false;
+    if(e.x>=FRAME && e.x<=W-FRAME && e.y>=FRAME && e.y<=H-FRAME){
+      e.entering=false;
+      e.nextFireAt=Math.max(e.nextFireAt, performance.now()+SPAWN_FIRE_DELAY);  // settle before firing on arrival
+    }
   } else {
     e.x=Math.max(FRAME+e.r,Math.min(W-FRAME-e.r,e.x));
     e.y=Math.max(FRAME+e.r,Math.min(H-FRAME-e.r,e.y));
@@ -427,7 +439,15 @@ function update(dt){
     run.timer-=dt*1000;
     if(run.timer<=0){
       run.phase='fighting'; SFX.waveStart();
-      for(const e of enemies){ e.spawning=false; if(e.invisible){ SFX.electric(); e.cloakStart=now; } } // White cloaks on round start
+      // Wave goes live: don't let anyone fire on frame 1 from their RANDOM spawn angle.
+      // Point aiming turrets at the player to start, and stagger first shots behind a
+      // settle delay so the turrets line up first (no opening random volley / self-fire).
+      for(const e of enemies){
+        e.spawning=false;
+        if(e.aim!=='none') e.turretAngle=Math.atan2(tank.y-e.y, tank.x-e.x);
+        e.nextFireAt=now+SPAWN_FIRE_DELAY+Math.random()*500;
+        if(e.invisible){ SFX.electric(); e.cloakStart=now; }   // White cloaks on round start
+      }
     }
   }
   // ---- enemies (inert while warping in) ----
