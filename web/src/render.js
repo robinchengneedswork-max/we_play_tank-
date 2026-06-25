@@ -253,7 +253,7 @@ function render(){
     ctx.fillText('FIRE',fireBtn.x,fireBtn.y);
   }
   // deploy button (left index) — shown whenever a gadget is equipped; dims on cooldown / no charges
-  if(gameMode==='roguelike' && run.gadget){
+  if(run.gadget){
     const ready = run.gadgetCharges>0 && performance.now()>=run.gadgetCdUntil;
     ctx.beginPath();ctx.arc(deployBtn.x,deployBtn.y,deployBtn.r,0,7);
     ctx.fillStyle=ready?'rgba(95,160,210,.85)':'rgba(95,160,210,.4)';ctx.fill();

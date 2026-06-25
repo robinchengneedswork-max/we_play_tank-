@@ -826,11 +826,18 @@ function damageTank(t, dmg){
         tank.charged=true; burst(t.x,t.y,'#9fd8ff',16); if(cfg.shake) shake=Math.min(shake+5,10); SFX.hit(); return;
       }
       onPlayerDeath();                     // any hit is lethal → lose a life, retry the wave
-    } else {                               // sandbox player is immortal (feedback only)
-      burst(t.x,t.y,'#ffffff',12);
-      if(cfg.shake) shake=Math.min(shake+8,12);
-      if(cfg.haptics&&navigator.vibrate) navigator.vibrate([18,40,18]);
-      SFX.hit();
+    } else {                               // sandbox
+      if(sbReactHits){                     // test mode: react like a run (vibranium charge / lethal → respawn)
+        if(playerFlying() || performance.now()<tank.iframes) return;
+        if(run.vibranium && !tank.charged){ tank.charged=true; burst(t.x,t.y,'#9fd8ff',16); if(cfg.shake) shake=Math.min(shake+5,10); SFX.hit(); return; }
+        burst(t.x,t.y,'#ffffff',18); burst(t.x,t.y,'#e8a23a',12); if(cfg.shake) shake=14; SFX.death();
+        resetPlayerToSpawn();              // "death" in sandbox = just respawn in place, no run to lose
+      } else {                             // default: immortal (feedback only)
+        burst(t.x,t.y,'#ffffff',12);
+        if(cfg.shake) shake=Math.min(shake+8,12);
+        if(cfg.haptics&&navigator.vibrate) navigator.vibrate([18,40,18]);
+        SFX.hit();
+      }
     }
   } else {
     t.hp-=dmg;

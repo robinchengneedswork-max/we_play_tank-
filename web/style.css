@@ -98,8 +98,17 @@ html,body{height:100%;overflow:hidden;background:#1a1916;
 #sbUp h2{font-size:18px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;opacity:.82;}
 #goStats{font-size:15px;opacity:.82;}
 .go-btns{display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:center;}
-#sbUpList{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;max-width:640px;}
+#sbUpList{display:flex;flex-direction:column;gap:9px;width:min(94vw,680px);max-height:72vh;overflow-y:auto;padding:4px 6px;}
 #sbUp .panel-btn{width:auto;margin:0;padding:12px 18px;}
+/* sandbox lab: stacked sections of compact pill buttons */
+.sb-sum{font-size:12.5px;font-weight:700;color:#e8c84a;text-align:center;margin:0 0 2px;}
+.sb-section{display:flex;flex-direction:column;gap:5px;}
+.sb-h{font-size:10px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;opacity:.55;}
+.sb-row{display:flex;gap:6px;flex-wrap:wrap;}
+.sb-btn{cursor:pointer;border:none;font:inherit;font-size:12px;font-weight:600;padding:7px 11px;border-radius:8px;
+  background:#34302b;color:#f3ecd9;box-shadow:0 2px 0 rgba(0,0,0,.35);}
+.sb-btn:active{transform:translateY(1px);box-shadow:0 1px 0 rgba(0,0,0,.35);}
+.sb-active{background:#c0954a;color:#1a1714;box-shadow:0 2px 0 rgba(0,0,0,.4),0 0 0 2px #e8c84a inset;}
 /* sandbox HUD buttons (round, like menu/gear) */
 #sbUpgradeBtn,#sbMapBtn{pointer-events:auto;cursor:pointer;width:40px;height:40px;border-radius:50%;border:none;
   background:rgba(255,255,255,.66);font-size:18px;display:flex;align-items:center;justify-content:center;

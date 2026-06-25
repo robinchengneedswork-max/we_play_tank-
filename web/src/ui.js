@@ -140,20 +140,56 @@ function showGameOver(){
 document.getElementById('goRetry').onclick=()=>{ gameover.classList.remove('active'); startMode('roguelike'); };
 document.getElementById('goMenu').onclick =()=>{ gameover.classList.remove('active'); toMenu(); };
 
-// ---- sandbox upgrade tester: apply any upgrade (stackable) to try combos ----
+// ---- sandbox arsenal lab: class + two-slot loadout + enemy spawning + a test-hits toggle ----
 const sbUp=document.getElementById('sbUp');
 const sbUpList=document.getElementById('sbUpList');
-function openSandboxUpgrades(){
-  paused=true; sbUpList.innerHTML='';
-  UPGRADES.forEach(u=>{
-    const b=document.createElement('button'); b.className='up-card';
-    b.innerHTML='<b>'+u.name+'</b><small>'+u.desc+'</small>';
-    b.onclick=()=>{ u.apply(); updateHud(); };   // stackable; overlay stays open
-    sbUpList.appendChild(b);
-  });
-  sbUp.classList.add('active');
+const SB_CLASS=[['none','None'],['light','Light'],['medium','Medium'],['destroyer','TD'],['heavy','Heavy']];
+const SB_GUN  =[['none','None'],['apds','APDS'],['scatter','Scatter'],['laser','Laser'],['wireGuided','Wire'],['bounceRocket','Bounce']];
+const SB_ENEMIES=['brown','grey','teal','yellow','red','green','purple','white','black','heavy','boss'];
+
+function sbBtn(label, active, onclick){
+  const b=document.createElement('button'); b.className='sb-btn'+(active?' sb-active':''); b.textContent=label; b.onclick=onclick; return b;
 }
+function sbSection(title, btns){
+  const w=document.createElement('div'); w.className='sb-section';
+  const h=document.createElement('div'); h.className='sb-h'; h.textContent=title; w.appendChild(h);
+  const r=document.createElement('div'); r.className='sb-row'; btns.forEach(b=>r.appendChild(b)); w.appendChild(r);
+  return w;
+}
+function sbCurrentLeft(){ return run.gadget?run.gadget.id : (run.vibranium?'vibranium':(tank.armor?'glacis':'none')); }
+// Apply a class loadout live (mirrors startMode's baked-slot setup) so its feel/traits are testable.
+function setSandboxClass(key){
+  run.class = (key && key!=='none') ? CLASSES[key] : null;
+  run.gunMode = (run.class && run.class.bakedGun) || null;
+  clearLeftSlot();
+  if(run.class && run.class.bakedLeft) setLeftSlot(run.class.bakedLeft);
+  tank.tracks = !!(run.class && run.class.tracks);
+  tank.rocket = false;
+  updateHud(); renderSandboxLab();
+}
+function renderSandboxLab(){
+  sbUpList.innerHTML='';
+  const left=sbCurrentLeft();
+  const sum=document.createElement('p'); sum.className='sb-sum';
+  sum.textContent='Class '+(run.class?run.class.name:'—')+'  ·  Gun '+(run.gunMode||'—')+'  ·  Left '+(left==='none'?'—':left);
+  sbUpList.appendChild(sum);
+  sbUpList.appendChild(sbSection('Class', SB_CLASS.map(([k,l])=>sbBtn(l,(run.class?run.class.key:'none')===k,()=>setSandboxClass(k)))));
+  sbUpList.appendChild(sbSection('Right slot · gun', SB_GUN.map(([k,l])=>sbBtn(l,(run.gunMode||'none')===k,()=>{ run.gunMode=k==='none'?null:k; updateHud(); renderSandboxLab(); }))));
+  const leftOpts=[['none','None'],['glacis','Glacis'],['vibranium','Vibranium'],...Object.keys(GADGETS).map(id=>[id,GADGETS[id].name])];
+  sbUpList.appendChild(sbSection('Left slot · defense / gadget', leftOpts.map(([k,l])=>sbBtn(l,left===k,()=>{ if(k==='none')clearLeftSlot(); else setLeftSlot(k); updateHud(); renderSandboxLab(); }))));
+  sbUpList.appendChild(sbSection('Stat upgrades (stack)', UPGRADES.filter(u=>u.tier!=='rulebreaker').map(u=>sbBtn(u.name,false,()=>{ u.apply(); updateHud(); renderSandboxLab(); }))));
+  sbUpList.appendChild(sbSection('Spawn enemy', SB_ENEMIES.map(t=>sbBtn(t,false,()=>sandboxSpawn(t)))));
+  sbUpList.appendChild(sbSection('Range', [sbBtn('Clear enemies',false,()=>{ sandboxClearEnemies(); }), sbBtn('Refill range',false,()=>{ spawnSandboxSet(); })]));
+  sbUpList.appendChild(sbSection('Options', [
+    sbBtn('React to hits: '+(sbReactHits?'ON':'OFF'), sbReactHits, ()=>{ sbReactHits=!sbReactHits; renderSandboxLab(); }),
+  ]));
+}
+function openSandboxUpgrades(){ paused=true; renderSandboxLab(); sbUp.classList.add('active'); }
 document.getElementById('sbUpgradeBtn').onclick=openSandboxUpgrades;
 document.getElementById('sbMapBtn').onclick=sandboxNextMap;
-document.getElementById('sbUpClear').onclick=()=>{ run.mods=freshMods(); run.maxHp=3; run.hp=3; tank.maxHp=3; tank.hp=3; updateHud(); };
+document.getElementById('sbUpClear').onclick=()=>{
+  run.mods=freshMods(); run.maxHp=3; run.hp=3; tank.maxHp=3; tank.hp=3;
+  run.gunMode=null; clearLeftSlot(); run.class=null; tank.tracks=false; tank.rocket=false;
+  updateHud(); renderSandboxLab();
+};
 document.getElementById('sbUpClose').onclick=()=>{ sbUp.classList.remove('active'); paused=false; };

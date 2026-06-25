@@ -271,6 +271,10 @@ function reinforceSpawn(r){
 function spawnSandboxSet(){
   ['brown','grey','teal','red'].forEach(tp=>{ const e=spawnEnemy(tp,0,0); if(e){ const p=enemySpawnPos(); e.x=p.x; e.y=p.y; } });
 }
+// Sandbox helpers: spawn one of any type on demand / clear the range.
+let sbReactHits=false;   // sandbox option: player reacts to hits (armor/vibranium) vs immortal-with-feedback
+function sandboxSpawn(type){ const e=spawnEnemy(type,0,0); if(e){ const p=enemySpawnPos(); e.x=p.x; e.y=p.y; e.spawning=false; } }
+function sandboxClearEnemies(){ enemies.length=0; shells.length=0; mines.length=0; turrets.length=0; spiderMines.length=0; }
 
 // Roguelike wave composition (T7). Hand-authored opener; procedural escalation at 8+.
 const WAVES=[
