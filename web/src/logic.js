@@ -426,9 +426,11 @@ function update(dt){
           if(sh.b<0) dead=true;                       // spent its bounces → fizzle; else it flies on (maybe back at you)
           break;
         } else if(act==='absorb'){
-          // track hit absorbed: enemy heavy breaks PERMANENTLY (side then vulnerable);
-          // the 1-hp player heavy is only ROOTED for a beat (tracks "repair", stays alive)
-          if(victim.team==='player'){ victim.immobileUntil = now + HEAVY_STUN_MS; }
+          // track hit absorbed (no hp): player heavy is rooted for HEAVY_STUN_MS AND that
+          // side is detracked for the rest of the life (now soft there); enemy heavy breaks
+          // globally + immobile permanently.
+          if(victim.team==='player'){ victim.immobileUntil = now + HEAVY_STUN_MS;
+            if(victim.brokenSides) victim.brokenSides[victim.hitSide]=true; }
           else { victim.trackBroken=true; victim.immobileUntil = Infinity; }
           burst(sh.x,sh.y,victim.color,8); SFX.hit();
           if(cfg.shake) shake=Math.min(shake+3,9);
@@ -475,12 +477,17 @@ function burst(x,y,color,n){
 // immobilize), or 'damage'. Unarmored tanks (incl. the player) always take 'damage'.
 function resolveHit(victim, sh){
   const a=victim.armor; if(!a) return 'damage';
-  const rel=Math.abs(((Math.atan2(sh.y-victim.y, sh.x-victim.x) - victim.bodyAngle + Math.PI)%(2*Math.PI))-Math.PI);
-  const front = rel <= a.frontArc;
-  const rear  = rel >= Math.PI - a.rearArc;
-  if(front && a.deflect && !sh.rocket) return 'deflect';       // glacis turns a normal shell; rockets punch through
-  if(!front && !rear && a.tracks && !victim.trackBroken) return 'absorb';  // first side hit kills mobility
-  return 'damage';                                             // rear, rocket-to-front, or an already-broken side
+  const rel=((Math.atan2(sh.y-victim.y, sh.x-victim.x) - victim.bodyAngle + Math.PI)%(2*Math.PI))-Math.PI;  // signed
+  const ab=Math.abs(rel);
+  if(ab <= a.frontArc) return (a.deflect && !sh.rocket) ? 'deflect' : 'damage';   // glacis turns a normal shell; rockets punch through
+  if(ab >= Math.PI - a.rearArc) return 'damage';               // rear is always soft
+  if(!a.tracks) return 'damage';
+  // side hit. Player tracks break PER-SIDE (each side stays vulnerable once detracked);
+  // the enemy heavy uses a single global break. `hitSide` is read by the absorb branch.
+  victim.hitSide = rel>=0 ? 'pos' : 'neg';
+  const broken = victim.team==='player' ? !!(victim.brokenSides && victim.brokenSides[victim.hitSide])
+                                        : victim.trackBroken;
+  return broken ? 'damage' : 'absorb';                         // already-detracked side → soft; else absorb the hit
 }
 function damageTank(t, dmg){
   if(t.team==='player'){

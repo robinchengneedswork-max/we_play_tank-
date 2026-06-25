@@ -3,7 +3,8 @@
 
 const tank={x:0,y:0,r:17,bodyAngle:0,turretAngle:-Math.PI/2,vx:0,vy:0,
             team:'player',hp:3,maxHp:3,lastFire:0,fireSlowUntil:0,
-            armor:null,trackBroken:false,immobileUntil:0};   // Heavy class: directional armor + timed root
+            armor:null,trackBroken:false,immobileUntil:0,
+            brokenSides:{pos:false,neg:false}};   // Heavy class: directional armor, timed root, per-side detrack
 let blockRects=[];       // solid obstacle rects (pixel space); baked from the map by projectMap()
 let holeRects=[];        // pits (+ water, tagged): block movement, but shells fly over + LOS clear (M1)
 let crates=[];           // destructible cover {x,y,w,h,hp,max,crate} — bounce+block until broken (M3)
@@ -211,6 +212,7 @@ function resetPlayerToSpawn(){
   tank.bodyAngle=0; tank.turretAngle=-Math.PI/2; tank.aimTarget=tank.turretAngle;
   tank.lastFire=0; tank.fireSlowUntil=0;
   tank.trackBroken=false; tank.immobileUntil=0;    // tracks repaired on (re)spawn
+  tank.brokenSides={pos:false,neg:false};
 }
 
 // Reset the arena for a fresh start of either mode.

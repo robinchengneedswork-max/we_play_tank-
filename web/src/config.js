@@ -28,7 +28,7 @@ function loadPrefs(){ try{ const s=localStorage.getItem('tankPrefs'); if(!s) ret
 loadPrefs();
 
 const FRAME = 18;                 // board inner margin (px)
-const HEAVY_STUN_MS = 1300;       // Heavy player: a track hit roots you this long (enemy heavy is permanent)
+const HEAVY_STUN_MS = 10000;      // Heavy player: a track hit roots you this long; that side stays detracked (vulnerable) for the life
 
 let W=0, H=0, DPR=1;             // canvas size, set in main.resize()
 let mode='brawl';                 // 'brawl' | 'pubg'  (right-stick fire model)
