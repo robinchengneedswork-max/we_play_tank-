@@ -11,246 +11,189 @@ const CRATE_HP = 2;              // shots a crate takes before it breaks (M3)
 // On SIEGE maps: 'H' marks the hold zone (the fortress you capture + defend);
 // 'e' cells mark the edge(s) reinforcements pour in from (so maps can be linear).
 
-// Map library (M2). Each map: name, spawn style ('warp' default | 'siege'), and a
-// 16×9 ASCII grid. TACTICAL — cut-off geometry (U's, chokepoints, one-gap walls) is
-// WANTED: isolating fights is part of the combat puzzle, and a tank that can't reach
-// the player now IDLE-WANDERS instead of stacking in a corner (see _stuckMs / idle
-// wander in logic.js), so concave pockets and long walls are fair game. Still: keep
-// the player's spawn reachable and don't fully seal a room the player must escape.
-// HOLES ('O') stay the most elegant divider — they split MOVEMENT but never block
-// line-of-sight or the AI's aim, so bots behind one still shoot back. Gaps a tank
-// passes through want >=2 cells (one tank-width is ~1 cell). 'siege' maps keep their
-// edge approaches open so off-screen reinforcements can drive in.
+// Map library (M2), authored 16×9. DENSITY is the thing that makes a board read
+// tactical instead of "open" — modelled on real Wii Play *Tanks!* arenas, which
+// spread cover across the WHOLE field (pillar lattices, near-full-width banded walls,
+// central crosses) at roughly a quarter fill. So: keep cover within a couple of cells
+// of most places, no big empty margins. Cut-off geometry (U's, chokepoints, long
+// walls) is fine — a tank that can't reach the player IDLE-WANDERS instead of stacking
+// (see _stuckMs / idle wander in logic.js). Rules that still hold: keep the player's
+// spawn reachable; don't seal a room the player must escape; tank-passable gaps want
+// >=2 cells (one tank-width is ~1 cell); HOLES ('O') split MOVEMENT but never block
+// line-of-sight or the AI's aim, so bots behind one still shoot back. 'siege' maps keep
+// their edge approaches open so off-screen reinforcements can drive in.
 const MAPS=[
-  // Two soft rooms split by a broken central spine; cross at the middle, bank off
-  // the spine, peek-shoot over the centre holes.
-  { name:'Classic', spawn:'warp', grid:[
+  // Pillar lattice (Wii Mission 4): even cover edge-to-edge, 2-cell lanes both ways.
+  { name:'Lattice', spawn:'warp', grid:[
     "................",
-    ".......##.......",
-    ".......##.......",
-    "....O.......O...",
-    "..S....OO....e..",
-    "....O.......O...",
-    ".......##.......",
-    ".......##.......",
+    "..#..#..#..#..#.",
     "................",
-  ]},
-  // Central divider (block teeth + hole slits) → two rooms joined by three gates
-  // (top edge / centre / bottom edge). The classic "couple of rooms" split.
-  { name:'Twin Rooms', spawn:'warp', grid:[
+    "..#..#..#..#..#.",
+    ".S...........e..",
+    "..#..#..#..#..#.",
     "................",
-    ".......##.......",
-    ".......OO.......",
-    ".......##.......",
-    "..S.........e...",
-    ".......##.......",
-    ".......OO.......",
-    ".......##.......",
+    "..#..#..#..#..#.",
     "................",
   ]},
-  // Four wall-posts frame a central chamber → four corner rooms; fight in/around
-  // the middle, bank off the gate posts.
+  // Block city: a grid of streets between block clusters — always cover, always a lane.
+  { name:'City Blocks', spawn:'warp', grid:[
+    "................",
+    ".###..###..###..",
+    "................",
+    ".###..###..###..",
+    ".S...........e..",
+    ".###..###..###..",
+    "................",
+    ".###..###..###..",
+    "................",
+  ]},
+  // Banded walls (Wii Mission 2) offset into a serpentine — weave around the open ends.
+  { name:'Bands', spawn:'warp', grid:[
+    "................",
+    "...#######......",
+    "................",
+    "......#######...",
+    ".S...........e..",
+    "...#######......",
+    "................",
+    "......#######...",
+    "................",
+  ]},
+  // Central cross carves four quadrants; cross at the open middle, bank off the arms.
   { name:'Central Cross', spawn:'warp', grid:[
-    "................",
-    "......#..#......",
-    "......#..#......",
-    "................",
-    "..S..#.OO.#..e..",
-    "................",
-    "......#..#......",
-    "......#..#......",
-    "................",
+    ".......##.......",
+    "..##...##...##..",
+    ".......##.......",
+    "..##........##..",
+    ".S....#..#....e.",
+    "..##........##..",
+    ".......##.......",
+    "..##...##...##..",
+    ".......##.......",
   ]},
-  // A hole CROSS carves four rooms — movement funnels to the centre crossroads +
-  // edge lanes, but the AI sees/shoots across every quadrant (holes never blind it).
+  // A hole cross + corner forts: four rooms, but everyone can still SHOOT across.
   { name:'Four Quadrants', spawn:'warp', grid:[
     "................",
+    "..##...OO...##..",
     ".......OO.......",
-    "...#...OO...#...",
+    ".OO....OO....OO.",
+    ".S...........e..",
+    ".OO....OO....OO.",
     ".......OO.......",
-    "..S.OO....OO.e..",
-    ".......OO.......",
-    "...#...OO...#...",
-    ".......OO.......",
+    "..##...OO...##..",
     "................",
   ]},
-  // Twin diagonal funnels pinching at a centre block — a gallery for bouncing
-  // shells around the staircases to hit what's hiding behind them.
+  // Twin diagonal funnels pinching a centre block — a gallery for bank shots.
   { name:'Bank Gallery', spawn:'warp', grid:[
     "................",
     "...##......##...",
     "....##....##....",
     ".....##..##.....",
-    "..S....##....e..",
+    ".S....####...e..",
     ".....##..##.....",
     "....##....##....",
     "...##......##...",
     "................",
   ]},
-  // Shoot-over lanes: six hole pillars + two bank blocks, wide open midband.
+  // Eight hole pillars frame a central duelling band — shoot over, can't drive through.
   { name:'Hole Gauntlet', spawn:'warp', grid:[
     "................",
-    "..OO..OO..OO....",
-    "..OO..OO..OO....",
+    "..OO.OO.OO.OO...",
+    "..OO.OO.OO.OO...",
     "................",
-    "..S..#....#..e..",
+    ".S...........e..",
     "................",
-    "..OO..OO..OO....",
-    "..OO..OO..OO....",
+    "..OO.OO.OO.OO...",
+    "..OO.OO.OO.OO...",
     "................",
   ]},
-  // Inverse map: cover hugs the perimeter (corner forts), the centre is the killing
-  // floor with a peek-over hole column down the middle.
+  // Cover packed around the rim, an open centre with a peek-over hole to fight across.
   { name:'Perimeter Cover', spawn:'warp', grid:[
     "................",
-    ".##.........##..",
-    ".##....OO...##..",
-    ".......OO.......",
-    "..S.........e...",
-    ".......OO.......",
-    ".##....OO...##..",
-    ".##.........##..",
+    ".##..##..##..##.",
+    ".##..........##.",
+    "........#.......",
+    ".S.....OO....e..",
+    "........#.......",
+    ".##..........##.",
+    ".##..##..##..##.",
     "................",
   ]},
-  // Two leaky diagonal block-lines slash the field into three weaving lanes —
-  // single blocks so tanks slip the corners; endless bank angles.
+  // Staggered diagonal block rows (clear lanes between) — diagonal sightline breaks
+  // and endless bank angles, but always a row to drive down.
   { name:'Diagonal Lanes', spawn:'warp', grid:[
+    "..#....#....#...",
     "................",
-    "..#......#......",
-    "...#......#.....",
-    "....#......#....",
-    "..S..#......#.e.",
-    "......#......#..",
-    ".......#......#.",
-    "........#......#",
+    ".#....#....#....",
+    "................",
+    "S....#....#...e.",
+    "................",
+    ".#....#....#....",
+    "................",
+    "..#....#....#...",
+  ]},
+  // Destructible cork city + a solid core: blast your own sightlines through the boxes.
+  { name:'Crate Yard', spawn:'warp', grid:[
+    "................",
+    ".CC..CC..CC..CC.",
+    ".CC..CC..CC..CC.",
+    "................",
+    ".S....####...e..",
+    "................",
+    ".CC..CC..CC..CC.",
+    ".CC..CC..CC..CC.",
+    "................",
+  ]},
+  // Water + holes only — dense terrain texture with zero LOS blockers, a movement puzzle.
+  { name:'Marsh', spawn:'warp', grid:[
+    "................",
+    ".WW..OO..OO..WW.",
+    ".WW..........WW.",
+    "....OO...OO.....",
+    ".S....WWWW...e..",
+    "....OO...OO.....",
+    ".WW..........WW.",
+    ".WW..OO..OO..WW.",
     "................",
   ]},
   // ---- SIEGE (assault→hold): clear the 'H' garrison, then HOLD the zone while
-  // reinforcements pour in from the 'e' edges. The approach is LAYERED — staggered
-  // teeth + slits give the defender chokepoint/bank moments — but flanks stay OPEN
-  // (no full walls) so attackers weave through instead of piling, with no pathfinding. ----
-  { name:'Redoubt', spawn:'siege', grid:[      // fortress on the left; attackers cross 2 cover layers from the right
+  // reinforcements pour in from the 'e' edges. The approach is layered cover that
+  // gives the defender chokepoint/bank moments; flanks stay open enough to drive in. ----
+  { name:'Redoubt', spawn:'siege', grid:[      // fortress on the left; attackers cross two cover layers from the right
     "................",
-    "............#.e.",
-    "..HH...##.......",
-    "..HH.......O..e.",
-    ".SHH...##....O..",
-    "..HH.......O..e.",
-    "..HH...##.......",
-    "............#.e.",
+    "......##..##..e.",
+    "..HH..OO..##....",
+    "..HH......OO..e.",
+    ".SHH..##..##....",
+    "..HH......OO..e.",
+    "..HH..OO..##....",
+    "......##..##..e.",
     "................",
   ]},
-  { name:'Causeway', spawn:'siege', grid:[     // attackers pour from the top and run a baffled isthmus to the keep
+  { name:'Causeway', spawn:'siege', grid:[     // attackers pour from the top, run a baffled isthmus to the keep
     "................",
     "..e...e...e...e.",
     "................",
-    "...##......##...",
+    "..###..##..###..",
     "......#..#......",
-    "................",
+    "...##......##...",
     "....#OHHHHO#....",
     ".....SHHHH......",
     "................",
   ]},
-  { name:'Crossroads', spawn:'siege', grid:[   // a central keep with slit-walls; attackers converge from top + both sides
+  { name:'Crossroads', spawn:'siege', grid:[   // central keep with slit-walls; attackers converge from top + both sides
     ".......e........",
-    "....##......##..",
+    "..##........##..",
     "......#OO#......",
     "e....O....O....e",
     "......HHHH......",
     "......HHHH......",
     "......#OO#......",
-    "....##......##..",
+    "..##........##..",
     ".......S........",
   ]},
-  // Destructible rooms: blast your own sightlines through the crate walls. Two solid
-  // anchors keep some permanent bank geometry; crates self-clear so nothing stays trapped.
-  { name:'Crate Yard', spawn:'warp', grid:[
-    "................",
-    "...CC....CC.....",
-    "...CC....CC.....",
-    "................",
-    "..S...CCCC...e..",
-    "................",
-    "...CC....CC.....",
-    "...CC....CC.....",
-    "................",
-  ]},
-  // Pure terrain texture — water + holes only, zero LOS blockers, so it's a movement
-  // puzzle with no trap risk at all: weave the wet ground while everyone can see across.
-  { name:'Marsh', spawn:'warp', grid:[
-    "................",
-    ".WW.......OO....",
-    ".WW.......OO....",
-    "................",
-    "..S.OO...OO..e..",
-    "................",
-    "....WW.......WW.",
-    "....WW.......WW.",
-    "................",
-  ]},
-  // ---- Wii Play "Tanks!" TRIBUTES — the iconic mission archetypes, rebuilt with our
-  // palette: cork(destructible)=C, wood(solid)=#, holes=O. NOT pixel-exact rips: the
-  // real game's bots had pathfinding, ours don't, so silhouettes are kept open-flanked
-  // (gaps >=2 cells, no hollow solid boxes) so our AI weaves instead of wedging. ----
-  { name:'First Sortie', spawn:'warp', grid:[   // M1 vibe: near-empty opener, two offset blocks
-    "................",
-    "................",
-    "......##........",
-    "......##........",
-    "..S.........e...",
-    "........##......",
-    "........##......",
-    "................",
-    "................",
-  ]},
-  { name:'Cork Cross', spawn:'warp', grid:[      // central destructible plus — blast your own lanes
-    "................",
-    ".......C........",
-    ".......C........",
-    ".....CCCCC......",
-    "..S..CC.CC...e..",
-    ".....CCCCC......",
-    ".......C........",
-    ".......C........",
-    "................",
-  ]},
-  { name:'Hole Crossing', spawn:'warp', grid:[   // four pits, open cross lanes — snipe across the gaps
-    "................",
-    "...OOOO..OOOO...",
-    "...OOOO..OOOO...",
-    "................",
-    "..S.........e...",
-    "................",
-    "...OOOO..OOOO...",
-    "...OOOO..OOOO...",
-    "................",
-  ]},
-  { name:'The Citadel', spawn:'warp', grid:[     // solid central keep you circle + bank around; cork outliers
-    "................",
-    "...C........C...",
-    ".....####.......",
-    ".....####.......",
-    "..S..####....e..",
-    ".....####.......",
-    ".....####.......",
-    "...C........C...",
-    "................",
-  ]},
-  { name:'Three Lanes', spawn:'warp', grid:[     // twin wood walls (hole slits) → three corridors joined top/middle/bottom
-    "................",
-    ".....#....#.....",
-    ".....#....#.....",
-    "................",
-    "..S..O....O..e..",
-    "................",
-    ".....#....#.....",
-    ".....#....#.....",
-    "................",
-  ]},
-  // ---- "PICK YOUR FIGHTS" — bolder cut-off geometry, now that stuck tanks idle-wander
-  // instead of corner-stacking. Enemies that can't reach you mill on the far side; you
-  // choose when to round the wall and take them one lane at a time. ----
-  { name:'Horseshoe', spawn:'warp', grid:[       // a C-redoubt open to the player's side; enemies must come around the ends
+  // ---- "PICK YOUR FIGHTS" — cut-off geometry the AI handles via idle wander. ----
+  { name:'Horseshoe', spawn:'warp', grid:[     // a C-redoubt open to the player; enemies must come around the ends
     "................",
     ".....######.....",
     ".........##.....",
@@ -261,7 +204,7 @@ const MAPS=[
     ".....######.....",
     "................",
   ]},
-  { name:'Pinch', spawn:'warp', grid:[           // two arenas, one central chokepoint — funnel them through one at a time
+  { name:'Pinch', spawn:'warp', grid:[         // two arenas, one central chokepoint — funnel them through one at a time
     ".......##.......",
     ".......##.......",
     ".......##.......",
@@ -271,6 +214,51 @@ const MAPS=[
     ".......##.......",
     ".......##.......",
     ".......##.......",
+  ]},
+  // ---- Wii Play "Tanks!" tributes (cork=C / wood=# / holes=O), kept open-flanked. ----
+  { name:'First Sortie', spawn:'warp', grid:[  // the light opener: a few blocks, easy sightlines
+    "................",
+    "....#......#....",
+    "......##........",
+    "......##........",
+    "..S.........e...",
+    "........##......",
+    "........##......",
+    "....#......#....",
+    "................",
+  ]},
+  { name:'Cork Cross', spawn:'warp', grid:[    // central destructible plus — blast your own lanes
+    "................",
+    ".......C........",
+    ".......C........",
+    ".....CCCCC......",
+    "..S..CC.CC...e..",
+    ".....CCCCC......",
+    ".......C........",
+    ".......C........",
+    "................",
+  ]},
+  { name:'The Citadel', spawn:'warp', grid:[   // solid central keep you circle + bank around; cork outliers
+    "................",
+    "...C........C...",
+    ".....####.......",
+    ".....####.......",
+    "..S..####....e..",
+    ".....####.......",
+    ".....####.......",
+    "...C........C...",
+    "................",
+  ]},
+  { name:'Three Lanes', spawn:'warp', grid:[   // twin wood walls (hole slits) → three corridors joined top/middle/bottom
+    "................",
+    ".....#....#.....",
+    ".....#....#.....",
+    "................",
+    "..S..O....O..e..",
+    "................",
+    ".....#....#.....",
+    ".....#....#.....",
+    "................",
   ]},
 ];
 
