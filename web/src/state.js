@@ -72,7 +72,7 @@ function spawnEnemy(typeName, x, y){
     // per-tank combat stats (fire() reads these; players have none → cfg fallback)
     speed:t.speed, shellSpeed:t.shellSpeed, bounce:t.bounce, cd:t.cd, maxShells:t.maxShells,
     rocket:t.rocket, aim:t.aim, engage:t.engage, mines:t.mines, invisible:t.invisible,
-    fireGap:t.fireGap, lastFire:0,
+    fireGap:t.fireGap, fireChance:t.fireChance ?? 1, lastFire:0,
     nextFireAt: now + t.fireGap[0] + Math.random()*(t.fireGap[1]-t.fireGap[0]),
     nextMineAt: now + 900 + Math.random()*1600,
     _stuckMs:0, idleUntil:0, idleHeading:0,   // idle-wander when cut off (logic.js)

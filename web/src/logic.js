@@ -211,7 +211,11 @@ function driveEnemy(e, now){
     // they happened to point). If due but still slewing, HOLD (don't reschedule) so the
     // shot goes off the instant we line up.
     if(now>=e.nextFireAt && Math.abs(td)<FIRE_ALIGN_TOL){
-      if(!wouldFriendlyFire(e,e.turretAngle)) fire(e, e.turretAngle);
+      // OG-style sparse firing: less-lethal types (fireChance<1) coin-flip each ready shot;
+      // a declined beat still costs a full fireGap, so effective interval ≈ fireGap/fireChance.
+      if(e.fireChance>=1 || Math.random()<e.fireChance){
+        if(!wouldFriendlyFire(e,e.turretAngle)) fire(e, e.turretAngle);
+      }
       scheduleFire(e,now);
     }
   }
