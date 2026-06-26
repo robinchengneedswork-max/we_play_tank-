@@ -17,12 +17,13 @@ function drawStick(p,color){
   ctx.strokeStyle='rgba(0,0,0,.18)';ctx.lineWidth=2;ctx.stroke();
   ctx.restore();
 }
-function drawPreview(){
-  if(!cfg.preview)return; const ap=activePointer('aim'); if(!ap)return;
-  const aimA=tank.turretAngle, sp=pShell();    // real gun direction (respects the TD arc) + class shell speed
-  let g={x:tank.x+Math.cos(aimA)*(tank.r+10),
-         y:tank.y+Math.sin(aimA)*(tank.r+10),
-         vx:Math.cos(aimA)*sp, vy:Math.sin(aimA)*sp, b:pBounce()};
+function drawPreview(p){
+  if(!cfg.preview || !p || p.down) return;
+  if(!(p.intent && p.intent.aiming)) return;          // only while the local player is actively aiming
+  const aimA=p.turretAngle, sp=pShell(p);    // real gun direction (respects the TD arc) + class shell speed
+  let g={x:p.x+Math.cos(aimA)*(p.r+10),
+         y:p.y+Math.sin(aimA)*(p.r+10),
+         vx:Math.cos(aimA)*sp, vy:Math.sin(aimA)*sp, b:pBounce(p)};
   ctx.save();ctx.setLineDash([3,7]);ctx.lineWidth=2.5;ctx.strokeStyle='rgba(44,42,38,.45)';
   ctx.beginPath();ctx.moveTo(g.x,g.y);
   const sdt=1/240;
@@ -103,7 +104,7 @@ function render(){
   }
   // siege hold zone — the fortress to capture + defend (red=contested, green=holding, amber=stand-in-it)
   if(holdRect){
-    const held=run.siege&&run.siege.phase==='hold', inz=inHoldZone(tank);
+    const held=run.siege&&run.siege.phase==='hold', inz=anyPlayerInHold();
     const col = !held ? '217,72,59' : (inz ? '95,191,106' : '232,178,74');
     ctx.save();
     ctx.fillStyle='rgba('+col+',0.12)'; ctx.fillRect(holdRect.x,holdRect.y,holdRect.w,holdRect.h);
@@ -165,7 +166,7 @@ function render(){
       ctx.beginPath();ctx.moveTo(m.x,m.y);ctx.lineTo(m.x+Math.cos(a)*7,m.y+Math.sin(a)*7);ctx.stroke(); }
     ctx.fillStyle=m.arm>0?'#caa46a':'#d9483b'; ctx.beginPath();ctx.arc(m.x,m.y,4,0,7);ctx.fill();
   }
-  drawPreview();
+  drawPreview(LP());
   // smoke trails (behind everything that moves)
   for(const s of smoke){
     const k=s.life/s.max;                       // 1 → 0
@@ -224,16 +225,16 @@ function render(){
   // particles
   for(const p of particles){ctx.globalAlpha=Math.max(0,p.life*3);ctx.fillStyle=p.c;
     ctx.beginPath();ctx.arc(p.x,p.y,3,0,7);ctx.fill();ctx.globalAlpha=1;}
-  // player tank (drawn last, on top; gone once destroyed)
-  if(!(gameMode==='roguelike' && run.phase==='dead')){
-    if(playerFlying()){ ctx.save();ctx.globalAlpha=0.22;ctx.fillStyle='#000';     // airborne shadow
-      ctx.beginPath();ctx.ellipse(tank.x,tank.y+13,tank.r+2,tank.r*0.55,0,0,7);ctx.fill();ctx.restore(); }
+  // player tanks (drawn last, on top; a downed player spectates and isn't drawn)
+  for(const p of activePlayers()){
+    if(playerFlying(p)){ ctx.save();ctx.globalAlpha=0.22;ctx.fillStyle='#000';     // airborne shadow
+      ctx.beginPath();ctx.ellipse(p.x,p.y+13,p.r+2,p.r*0.55,0,0,7);ctx.fill();ctx.restore(); }
     ctx.save();
-    if(playerCloaked()) ctx.globalAlpha=0.3;                                       // stealth: faded
-    drawTank(tank, getCSS('--tank'), getCSS('--tank-dark'));
+    if(playerCloaked(p)) ctx.globalAlpha=0.3;                                       // stealth: faded
+    drawTank(p, p.color, darken(p.color,0.55));
     ctx.restore();
-    if(tank.charged){ ctx.save();ctx.globalAlpha=0.85;ctx.strokeStyle='#9fd8ff';ctx.lineWidth=2.5;  // vibranium charge halo
-      ctx.beginPath();ctx.arc(tank.x,tank.y,tank.r+5+Math.sin(performance.now()/90)*2,0,7);ctx.stroke();ctx.restore(); }
+    if(p.charged){ ctx.save();ctx.globalAlpha=0.85;ctx.strokeStyle='#9fd8ff';ctx.lineWidth=2.5;  // vibranium charge halo
+      ctx.beginPath();ctx.arc(p.x,p.y,p.r+5+Math.sin(performance.now()/90)*2,0,7);ctx.stroke();ctx.restore(); }
   }
   ctx.restore();
   // sticks — show fixed bases where no thumb is down, then the active sticks
@@ -252,15 +253,16 @@ function render(){
     ctx.fillStyle='#fff';ctx.font='600 12px system-ui';ctx.textAlign='center';ctx.textBaseline='middle';
     ctx.fillText('FIRE',fireBtn.x,fireBtn.y);
   }
-  // deploy button (left index) — shown whenever a gadget is equipped; dims on cooldown / no charges
-  if(run.gadget){
-    const ready = run.gadgetCharges>0 && performance.now()>=run.gadgetCdUntil;
+  // deploy button (left index) — the LOCAL player's gadget; dims on cooldown / no charges
+  const lp=LP();
+  if(lp && lp.gadget){
+    const ready = lp.gadgetCharges>0 && performance.now()>=lp.gadgetCdUntil;
     ctx.beginPath();ctx.arc(deployBtn.x,deployBtn.y,deployBtn.r,0,7);
     ctx.fillStyle=ready?'rgba(95,160,210,.85)':'rgba(95,160,210,.4)';ctx.fill();
     ctx.strokeStyle='rgba(255,255,255,.8)';ctx.lineWidth=3;ctx.stroke();
     ctx.fillStyle='#fff';ctx.textAlign='center';ctx.textBaseline='middle';
     ctx.font='700 15px system-ui';ctx.fillText('⚙',deployBtn.x,deployBtn.y-6);
-    ctx.font='700 12px system-ui';ctx.fillText(run.gadgetCharges+'/'+run.gadgetMaxCharges,deployBtn.x,deployBtn.y+11);
+    ctx.font='700 12px system-ui';ctx.fillText(lp.gadgetCharges+'/'+lp.gadgetMaxCharges,deployBtn.x,deployBtn.y+11);
   }
   // wave countdown banner (screen-fixed, drawn outside the shake transform)
   if(gameMode==='roguelike' && run.phase==='intermission'){
@@ -281,7 +283,7 @@ function render(){
     ctx.save();ctx.textAlign='center';ctx.textBaseline='middle';
     ctx.fillStyle=getCSS('--ink');ctx.font='800 22px system-ui';
     ctx.fillText('HOLD  '+Math.max(0,Math.ceil(run.siege.timer/1000))+'s', W/2, 38);
-    if(!inHoldZone(tank)){ ctx.fillStyle='rgba(217,72,59,.95)';ctx.font='800 15px system-ui';
+    if(!anyPlayerInHold()){ ctx.fillStyle='rgba(217,72,59,.95)';ctx.font='800 15px system-ui';
       ctx.fillText('RETURN TO THE POINT', W/2, 62); }
     ctx.restore();
   }

@@ -17,6 +17,7 @@ function setHudForMode(){
 }
 
 let runClassKey=null;       // remembered so game-over Retry keeps the chosen class
+const LOCAL_COLOR='#3b6fb5';   // the host keyboard seat's tank colour (matches the server's P1 colour)
 async function startMode(m, classKey){
   gameMode=m; paused=false;
   // Fullscreen + landscape lock on the user gesture (best-effort; ignored on desktop).
@@ -25,16 +26,11 @@ async function startMode(m, classKey){
   showScreen(null);
   hud.classList.remove('hud-hidden');
   resize();                 // size canvas + bake the map's collision rects for current orientation
-  resetRun();               // reset run state + upgrade mods (both modes start at baseline)
+  resetRun();               // reset SHARED run state (level / lives / phase)
+  if(players.length===0) addPlayer('local', LOCAL_COLOR, 'P1');   // the host keyboard seat (network players join later)
   runClassKey = (m==='roguelike') ? (classKey||runClassKey||'medium') : null;
-  run.class = runClassKey ? CLASSES[runClassKey] : null;     // sandbox: null = cfg baseline
-  // baked-in class slots: right = gun-mode (TD = APDS), left = defensive item (Heavy = armor).
-  // Both are swappable at the depot; turretArc (locked traverse) is a permanent characteristic.
-  run.gunMode = (run.class && run.class.bakedGun) || null;
-  clearLeftSlot();
-  if(run.class && run.class.bakedLeft) setLeftSlot(run.class.bakedLeft);
-  tank.tracks = !!(run.class && run.class.tracks);       // Heavy: breakable side tracks (baked characteristic, independent of the left slot)
-  tank.rocket = false;                                    // rockets come from the APDS gun-mode now, not the class
+  // each player gets its OWN build: class + baked slots (TD = APDS right, Heavy = glacis left + tracks).
+  for(const p of players) setupPlayerForRun(p, runClassKey);      // sandbox: runClassKey null = cfg baseline
   resetArena();
   setHudForMode();
   updateHud();
@@ -43,6 +39,7 @@ async function startMode(m, classKey){
 
 function toMenu(){
   started=false; gameMode=null; paused=false;
+  players.length=0;            // drop the seats; startMode re-adds the local one (network players re-join)
   ['gameover','sbUp','shop'].forEach(id=>document.getElementById(id).classList.remove('active'));
   hud.classList.add('hud-hidden');
   showScreen('screen-menu');   // stay in fullscreen so re-entering a mode is instant

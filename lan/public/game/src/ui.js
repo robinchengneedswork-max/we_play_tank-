@@ -63,11 +63,17 @@ const GUN_NAME ={ laser:'Laser', wireGuided:'Wire-Guided', scatter:'Scattergun',
 const GUN_COLOR={ laser:'#8fe3ff', wireGuided:'#c08af0', scatter:'#f0b24a', bounceRocket:'#7ad6a0', apds:'#e86a5a' };
 function updateHud(){
   elHits.textContent='Hits '+score;
-  let s='Lv '+run.level+' · '+'♥'.repeat(Math.max(0,run.hp))+' · ◆'+run.scrap;
-  if(run.gunMode) s+=' · '+(GUN_GLYPH[run.gunMode]||'◗');               // right slot (gun-mode)
-  if(run.gadget)       s+=' · ⚙'+run.gadgetCharges+'/'+run.gadgetMaxCharges; // left slot: gadget charges
-  else if(run.vibranium) s+=' · ⚡V';                                    // left slot: vibranium
-  else if(tank.armor)    s+=' · 🛡';                                     // left slot: front glacis
+  // Shared team lives + level; then the LOCAL player's economy/build. (Per-player status for networked
+  // players goes to their phones in B2.)
+  const p=LP();
+  let s='Lv '+run.level+' · '+'♥'.repeat(Math.max(0,run.teamLives));
+  if(p){
+    s+=' · ◆'+p.scrap;
+    if(p.gunMode) s+=' · '+(GUN_GLYPH[p.gunMode]||'◗');               // right slot (gun-mode)
+    if(p.gadget)       s+=' · ⚙'+p.gadgetCharges+'/'+p.gadgetMaxCharges; // left slot: gadget charges
+    else if(p.vibranium) s+=' · ⚡V';                                  // left slot: vibranium
+    else if(p.armor)     s+=' · 🛡';                                   // left slot: front glacis
+  }
   elRun.textContent=s;
 }
 
@@ -111,7 +117,11 @@ function renderShopBuild(){
       +'<div class="bs-load"><span>Left</span><b>'+left+'</b></div>'
       +'<div class="bs-stats">'+rows+'</div></div>';
 }
-function openShop(){
+// DEFERRED (B1.10 / B2): the depot is now per-player + networked. In the B1 core pass it is bypassed
+// (finishWave rolls straight into the next wave); this stub keeps any stray caller safe. The single-
+// player shop renderers below are retained as a reference to port from, but are currently unreachable.
+function openShop(){ nextWave(); }
+function openShopLEGACY(){
   run.phase='shop';
   shake=0;                  // kill any leftover shake from the wave-ending hit
   rollShopRulebreakers();   // fresh pair of rulebreakers for this visit
@@ -199,28 +209,30 @@ function sbSection(title, btns){
   const r=document.createElement('div'); r.className='sb-row'; btns.forEach(b=>r.appendChild(b)); w.appendChild(r);
   return w;
 }
-function sbCurrentLeft(){ return run.gadget?run.gadget.id : (run.vibranium?'vibranium':(tank.armor?'glacis':'none')); }
-// Apply a class loadout live (mirrors startMode's baked-slot setup) so its feel/traits are testable.
+function sbCurrentLeft(){ const p=LP(); if(!p) return 'none'; return p.gadget?p.gadget.id : (p.vibranium?'vibranium':(p.armor?'glacis':'none')); }
+// Apply a class loadout live to the local player (mirrors startMode's baked-slot setup).
 function setSandboxClass(key){
-  run.class = (key && key!=='none') ? CLASSES[key] : null;
-  run.gunMode = (run.class && run.class.bakedGun) || null;
-  clearLeftSlot();
-  if(run.class && run.class.bakedLeft) setLeftSlot(run.class.bakedLeft);
-  tank.tracks = !!(run.class && run.class.tracks);
-  tank.rocket = false;
+  const p=LP(); if(!p) return;
+  p.class = (key && key!=='none') ? CLASSES[key] : null;
+  p.gunMode = (p.class && p.class.bakedGun) || null;
+  clearLeftSlot(p);
+  if(p.class && p.class.bakedLeft) setLeftSlot(p, p.class.bakedLeft);
+  p.tracks = !!(p.class && p.class.tracks);
+  p.rocket = false;
   updateHud(); renderSandboxLab();
 }
 function renderSandboxLab(){
   sbUpList.innerHTML='';
+  const p=LP(); if(!p) return;
   const left=sbCurrentLeft();
   const sum=document.createElement('p'); sum.className='sb-sum';
-  sum.textContent='Class '+(run.class?run.class.name:'—')+'  ·  Gun '+(run.gunMode||'—')+'  ·  Left '+(left==='none'?'—':left);
+  sum.textContent='Class '+(p.class?p.class.name:'—')+'  ·  Gun '+(p.gunMode||'—')+'  ·  Left '+(left==='none'?'—':left);
   sbUpList.appendChild(sum);
-  sbUpList.appendChild(sbSection('Class', SB_CLASS.map(([k,l])=>sbBtn(l,(run.class?run.class.key:'none')===k,()=>setSandboxClass(k)))));
-  sbUpList.appendChild(sbSection('Right slot · gun', SB_GUN.map(([k,l])=>sbBtn(l,(run.gunMode||'none')===k,()=>{ run.gunMode=k==='none'?null:k; updateHud(); renderSandboxLab(); }))));
+  sbUpList.appendChild(sbSection('Class', SB_CLASS.map(([k,l])=>sbBtn(l,(p.class?p.class.key:'none')===k,()=>setSandboxClass(k)))));
+  sbUpList.appendChild(sbSection('Right slot · gun', SB_GUN.map(([k,l])=>sbBtn(l,(p.gunMode||'none')===k,()=>{ p.gunMode=k==='none'?null:k; updateHud(); renderSandboxLab(); }))));
   const leftOpts=[['none','None'],['glacis','Glacis'],['vibranium','Vibranium'],...Object.keys(GADGETS).map(id=>[id,GADGETS[id].name])];
-  sbUpList.appendChild(sbSection('Left slot · defense / gadget', leftOpts.map(([k,l])=>sbBtn(l,left===k,()=>{ if(k==='none')clearLeftSlot(); else setLeftSlot(k); updateHud(); renderSandboxLab(); }))));
-  sbUpList.appendChild(sbSection('Stat upgrades (stack)', UPGRADES.filter(u=>u.tier!=='rulebreaker').map(u=>sbBtn(u.name,false,()=>{ u.apply(); updateHud(); renderSandboxLab(); }))));
+  sbUpList.appendChild(sbSection('Left slot · defense / gadget', leftOpts.map(([k,l])=>sbBtn(l,left===k,()=>{ if(k==='none')clearLeftSlot(p); else setLeftSlot(p,k); updateHud(); renderSandboxLab(); }))));
+  sbUpList.appendChild(sbSection('Stat upgrades (stack)', UPGRADES.filter(u=>u.tier!=='rulebreaker').map(u=>sbBtn(u.name,false,()=>{ u.apply(p); updateHud(); renderSandboxLab(); }))));
   sbUpList.appendChild(sbSection('Spawn enemy', SB_ENEMIES.map(t=>sbBtn(t,false,()=>sandboxSpawn(t)))));
   sbUpList.appendChild(sbSection('Range', [sbBtn('Clear enemies',false,()=>{ sandboxClearEnemies(); }), sbBtn('Refill range',false,()=>{ spawnSandboxSet(); })]));
   sbUpList.appendChild(sbSection('Options', [
@@ -231,8 +243,9 @@ function openSandboxUpgrades(){ paused=true; renderSandboxLab(); sbUp.classList.
 document.getElementById('sbUpgradeBtn').onclick=openSandboxUpgrades;
 document.getElementById('sbMapBtn').onclick=sandboxNextMap;
 document.getElementById('sbUpClear').onclick=()=>{
-  run.mods=freshMods(); run.maxHp=3; run.hp=3; tank.maxHp=3; tank.hp=3;
-  run.gunMode=null; clearLeftSlot(); run.class=null; tank.tracks=false; tank.rocket=false;
+  const p=LP(); if(!p) return;
+  p.mods=freshMods(); p.maxHp=1; p.hp=1;
+  p.gunMode=null; clearLeftSlot(p); p.class=null; p.tracks=false; p.rocket=false;
   updateHud(); renderSandboxLab();
 };
 document.getElementById('sbUpClose').onclick=()=>{ sbUp.classList.remove('active'); paused=false; };
