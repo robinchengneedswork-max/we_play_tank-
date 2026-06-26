@@ -18,26 +18,24 @@
     padding:max(10px,env(safe-area-inset-top)) 14px 0;z-index:5;font-size:13px;}
   .pill{background:rgba(255,255,255,.7);backdrop-filter:blur(3px);border-radius:999px;
     padding:6px 12px;font-weight:600;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.2);}
-  #modeBtn,#stickBtn{pointer-events:auto;cursor:pointer;border:none;font:inherit;background:var(--ink);
-    color:#f3ecd9;border-radius:999px;padding:8px 14px;font-weight:700;}
-  #modeBtn small,#stickBtn small{display:block;font-weight:500;opacity:.7;font-size:10px;margin-top:1px;}
-  #ctrlBtns{display:flex;gap:8px;}
   #conn{display:flex;align-items:center;gap:6px;}
   #dot{width:9px;height:9px;border-radius:50%;background:#d9a441;}
   #dot.ok{background:#4a9d5b;} #dot.bad{background:#c0584a;}
-  #start{position:fixed;inset:0;z-index:30;background:#1a1916;color:#e9e2cf;
+  /* lobby / start */
+  #start{position:fixed;inset:0;z-index:30;background:#1a1916;color:#e9e2cf;overflow-y:auto;
     display:flex;flex-direction:column;align-items:center;justify-content:center;
-    text-align:center;padding:24px;gap:14px;}
+    text-align:center;padding:24px;gap:13px;}
   #start h1{font-size:22px;font-weight:800;}
-  #start p{font-size:14px;opacity:.7;max-width:320px;line-height:1.5;}
-  #startBtn{margin-top:8px;padding:14px 30px;border:none;border-radius:12px;background:#3b6fb5;
-    color:#fff;font-size:16px;font-weight:700;cursor:pointer;}
-  #classPick{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:360px;margin-top:4px;}
-  .clsBtn{padding:9px 14px;border:2px solid #3a3833;border-radius:10px;background:#26241f;color:#e9e2cf;
+  #start p{font-size:13.5px;opacity:.72;max-width:330px;line-height:1.5;}
+  .lblrow{font-size:11px;letter-spacing:.08em;text-transform:uppercase;opacity:.5;margin-top:4px;}
+  #classPick{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:360px;}
+  .opt{padding:9px 14px;border:2px solid #3a3833;border-radius:10px;background:#26241f;color:#e9e2cf;
     font-size:13px;font-weight:700;cursor:pointer;}
-  .clsBtn.sel{border-color:#e8c84a;background:#3a3320;color:#fff;}
-  /* deploy trigger (left index) — only useful once a gadget is equipped, but always available */
-  #deployBtn{position:fixed;left:16px;bottom:16px;z-index:6;width:58px;height:58px;border-radius:50%;
+  .opt.sel{border-color:#e8c84a;background:#3a3320;color:#fff;}
+  #startBtn{margin-top:10px;padding:14px 34px;border:none;border-radius:12px;background:#3b6fb5;
+    color:#fff;font-size:16px;font-weight:800;cursor:pointer;}
+  /* deploy trigger (left index) */
+  #deployBtn{position:fixed;left:16px;bottom:16px;z-index:6;width:62px;height:62px;border-radius:50%;
     border:3px solid rgba(255,255,255,.7);background:rgba(95,160,210,.82);color:#fff;font-size:22px;
     font-weight:800;cursor:pointer;display:none;}
   #deployBtn:active{background:rgba(95,160,210,1);}
@@ -66,20 +64,22 @@
 <canvas id="pad"></canvas>
 <div id="hud">
   <div class="pill" id="conn"><span id="dot"></span><span id="connTxt">connecting…</span></div>
-  <div id="ctrlBtns">
-    <button id="modeBtn">Brawl<small>release to fire</small></button>
-    <button id="stickBtn">Floating<small>tap = center</small></button>
-  </div>
   <div class="pill" id="who">—</div>
 </div>
 <div id="start">
   <h1>Tank Arena Controller</h1>
-  <p>Left thumb drives, right thumb aims. Pick your tank, then tap to join. Toggle Brawl (release the aim stick to fire) vs PUBG (aim only + FIRE trigger) once in.</p>
+  <p>Left thumb drives. Right thumb aims — <b>push the aim stick past its ring to fire</b>. The ⚙ button (bottom-left) deploys your gadget.</p>
+  <div class="lblrow">Pick your tank</div>
   <div id="classPick">
-    <button class="clsBtn sel" data-class="medium">Medium</button>
-    <button class="clsBtn" data-class="light">Light</button>
-    <button class="clsBtn" data-class="destroyer">Tank Destroyer</button>
-    <button class="clsBtn" data-class="heavy">Heavy</button>
+    <button class="opt sel" data-class="medium">Medium</button>
+    <button class="opt" data-class="light">Light</button>
+    <button class="opt" data-class="destroyer">Tank Destroyer</button>
+    <button class="opt" data-class="heavy">Heavy</button>
+  </div>
+  <div class="lblrow">Stick style</div>
+  <div id="stickPick">
+    <button class="opt sel" data-stick="float">Floating<small></small></button>
+    <button class="opt" data-stick="fixed">Fixed</button>
   </div>
   <button id="startBtn">Tap to join</button>
 </div>
@@ -100,19 +100,17 @@
 "use strict";
 const cv=document.getElementById('pad'), ctx=cv.getContext('2d');
 
-// ---- input-feel config (client-side; gameplay tunables live on the host) ----
-const cfg={ rad:80, dz:26, hold:60, haptics:true }; // hold = pubg fire repeat cooldown ms
-
-let W=0,H=0,DPR=1,mode='brawl',started=false,myColor='#3b6fb5',myId=null;
-let fixedStick=false; try{ fixedStick=localStorage.getItem('fixedStick')==='1'; }catch(e){}  // anchor sticks to each half's center
-let fireBtn={x:0,y:0,r:40}, lastPubgFire=0;
-let turret=-Math.PI/2;            // last committed aim (mirrors host's eased turret intent)
+// input-feel config (client-side; gameplay tunables live on the host)
+const cfg={ rad:80, fireMs:80, haptics:true };   // fireMs = min gap between fire pings while pushed out
+let W=0,H=0,DPR=1,started=false,myColor='#3b6fb5',myId=null;
+let fixedStick=false; try{ fixedStick=localStorage.getItem('fixedStick')==='1'; }catch(e){}
+let turret=-Math.PI/2;            // last committed aim
+let lastFire=0, moveShoveLatch=false;
 
 function resize(){
   DPR=Math.min(window.devicePixelRatio||1,2);
   W=innerWidth;H=innerHeight;cv.width=W*DPR;cv.height=H*DPR;
   cv.style.width=W+'px';cv.style.height=H+'px';ctx.setTransform(DPR,0,0,DPR,0,0);
-  fireBtn.x=W-58;fireBtn.y=64;
 }
 addEventListener('resize',resize);
 addEventListener('orientationchange',()=>setTimeout(resize,200));
@@ -128,7 +126,7 @@ function connect(){
     if(m.type==='assigned'){ myId=m.id; myColor=m.color;
       document.getElementById('who').textContent='You are P'+m.id;
       document.getElementById('who').style.color=m.color;
-      sendClass(); }                       // tell the host which tank we picked
+      sendClass(); }
     if(m.type==='haptic' && cfg.haptics && navigator.vibrate) navigator.vibrate(m.pattern||[20]);
     if(m.type==='shop') renderCShop(m);
     if(m.type==='shopclose') hideCShop();
@@ -144,7 +142,7 @@ function sendClass(){ if(wsReady) ws.send(JSON.stringify({type:'classSelect',cla
 function sendBuy(key){ if(wsReady) ws.send(JSON.stringify({type:'buy',key})); }
 function sendShopDone(){ if(wsReady) ws.send(JSON.stringify({type:'shopDone'})); }
 
-// ---- Supply Depot on the phone (host pushes {shop}; we render cards, buy, then leave) ----
+// ---- Supply Depot on the phone ----
 function hideCShop(){ const o=document.getElementById('cshop'); if(o) o.style.display='none'; }
 function renderCShop(m){
   const o=document.getElementById('cshop'); o.style.display='flex';
@@ -165,95 +163,81 @@ function renderCShop(m){
   }
 }
 
-// ---- pointer -> stick role ----
+// ---- twin-stick pointers ----
 const pointers=new Map();
 function stickVec(p){ let dx=p.cx-p.bx,dy=p.cy-p.by; const d=Math.hypot(dx,dy)||1;
   const c=Math.min(d,cfg.rad); return {x:dx/d*c,y:dy/d*c,mag:c,raw:d,ang:Math.atan2(dy,dx)}; }
-function inFireBtn(x,y){ return mode==='pubg'&&Math.hypot(x-fireBtn.x,y-fireBtn.y)<fireBtn.r+6; }
 function activePointer(role){ for(const p of pointers.values()) if(p.role===role) return p; return null; }
 
 cv.addEventListener('pointerdown',e=>{ if(!started)return; cv.setPointerCapture(e.pointerId);
   const x=e.clientX,y=e.clientY;
-  if(inFireBtn(x,y)){ pointers.set(e.pointerId,{role:'fire'}); pubgFire(); return; }
   const role=x<W/2?'move':'aim';
   let bx=x,by=y;
-  if(fixedStick){ bx=role==='move'?W*0.25:W*0.75; by=H*0.5; }   // fixed: anchor to half-screen center
+  if(fixedStick){ bx=role==='move'?W*0.25:W*0.75; by=H*0.5; }
   const p={role,bx,by,cx:x,cy:y}; pointers.set(e.pointerId,p);
-  if(role==='aim'){ const s=stickVec(p); if(s.raw>6) turret=s.ang; }  // fixed-tap already deflects aim
+  if(role==='aim'){ const s=stickVec(p); if(s.raw>6) turret=s.ang; }
 });
-cv.addEventListener('pointermove',e=>{ const p=pointers.get(e.pointerId); if(!p||p.role==='fire')return;
+cv.addEventListener('pointermove',e=>{ const p=pointers.get(e.pointerId); if(!p)return;
   p.cx=e.clientX;p.cy=e.clientY;
   if(p.role==='aim'){ const s=stickVec(p); if(s.raw>6) turret=s.ang; }
 });
-function endPointer(e){ const p=pointers.get(e.pointerId); if(!p)return;
-  if(p.role==='aim'){ const s=stickVec(p);
-    if(mode==='brawl'&&s.mag>cfg.dz){ turret=s.ang; sendFire(turret); } }
-  pointers.delete(e.pointerId);
-}
+function endPointer(e){ pointers.delete(e.pointerId); }
 cv.addEventListener('pointerup',endPointer);
 cv.addEventListener('pointercancel',endPointer);
 
-function pubgFire(){ const now=performance.now(); if(now-lastPubgFire<cfg.hold)return;
-  lastPubgFire=now; sendFire(turret); if(cfg.haptics&&navigator.vibrate)navigator.vibrate(14); }
-
-// ---- input stream (~30Hz, only on change) ----
+// ---- input stream + push-to-fire/deploy (~30Hz) ----
 let lastSent={mx:0,my:0,aim:0,aiming:false};
 setInterval(()=>{
   if(!started||!wsReady)return;
-  const mp=activePointer('move'); let mx=0,my=0;
-  if(mp){ const s=stickVec(mp); const n=s.mag/cfg.rad; mx=Math.cos(s.ang)*n; my=Math.sin(s.ang)*n; }
-  const aiming=!!activePointer('aim');
+  const mp=activePointer('move'); let mx=0,my=0,moveRaw=0;
+  if(mp){ const s=stickVec(mp); const n=s.mag/cfg.rad; mx=Math.cos(s.ang)*n; my=Math.sin(s.ang)*n; moveRaw=s.raw; }
+  const ap=activePointer('aim'); const aiming=!!ap;
+  // stream the move/aim intent on change
   const changed=Math.abs(mx-lastSent.mx)>0.02||Math.abs(my-lastSent.my)>0.02||
                 Math.abs(turret-lastSent.aim)>0.02||aiming!==lastSent.aiming;
   if(changed){ sendInput(+mx.toFixed(3),+my.toFixed(3),+turret.toFixed(3),aiming);
     lastSent={mx,my,aim:turret,aiming}; }
+  // PUSH THE AIM STICK PAST ITS RING -> fire (auto, throttled; the host gates the real rate of fire)
+  if(ap){ const s=stickVec(ap);
+    if(s.raw>cfg.rad+4){ const now=performance.now();
+      if(now-lastFire>cfg.fireMs){ lastFire=now; sendFire(turret); if(cfg.haptics&&navigator.vibrate) navigator.vibrate(8); } } }
 }, 33);
 
-// ---- render: just the controls (the tank lives on the TV) ----
+// ---- render: the controls (the tank lives on the TV) ----
 function drawStick(p,color){ if(!p)return; const s=stickVec(p);
   ctx.globalAlpha=.9;
   ctx.beginPath();ctx.arc(p.bx,p.by,cfg.rad,0,7);ctx.strokeStyle='rgba(255,255,255,.5)';ctx.lineWidth=3;ctx.stroke();
   ctx.beginPath();ctx.arc(p.bx,p.by,cfg.rad,0,7);ctx.fillStyle='rgba(255,255,255,.1)';ctx.fill();
+  // a brighter ring when the aim stick is pushed out far enough to be firing
+  if(p.role==='aim' && s.raw>cfg.rad+4){ ctx.beginPath();ctx.arc(p.bx,p.by,cfg.rad,0,7);ctx.strokeStyle='rgba(217,72,59,.9)';ctx.lineWidth=4;ctx.stroke(); }
   ctx.beginPath();ctx.arc(p.bx+s.x,p.by+s.y,28,0,7);ctx.fillStyle=color;ctx.fill();ctx.globalAlpha=1;}
 function render(){
   ctx.fillStyle='#23211d';ctx.fillRect(0,0,W,H);
-  // hint dividers
   ctx.strokeStyle='rgba(255,255,255,.06)';ctx.lineWidth=1;
   ctx.beginPath();ctx.moveTo(W/2,40);ctx.lineTo(W/2,H);ctx.stroke();
   ctx.fillStyle='rgba(255,255,255,.18)';ctx.font='600 13px system-ui';ctx.textAlign='center';
-  ctx.fillText('DRIVE',W*0.25,H-22); ctx.fillText(mode==='pubg'?'AIM':'AIM • release = fire',W*0.75,H-22);
-  if(fixedStick){ ctx.globalAlpha=1;                       // show the fixed anchors at rest
+  ctx.fillText('DRIVE',W*0.25,H-22); ctx.fillText('AIM · push out to fire',W*0.75,H-22);
+  if(fixedStick){ ctx.globalAlpha=1;
     for(const cx of [W*0.25,W*0.75]){ ctx.beginPath();ctx.arc(cx,H*0.5,cfg.rad,0,7);
       ctx.strokeStyle='rgba(255,255,255,.13)';ctx.lineWidth=2;ctx.stroke(); } }
   drawStick(activePointer('move'),myColor);
   drawStick(activePointer('aim'),'rgba(217,72,59,.92)');
-  if(mode==='pubg'){ const held=activePointer('fire');
-    ctx.beginPath();ctx.arc(fireBtn.x,fireBtn.y,fireBtn.r,0,7);
-    ctx.fillStyle=held?'rgba(217,72,59,.95)':'rgba(217,72,59,.78)';ctx.fill();
-    ctx.strokeStyle='rgba(255,255,255,.8)';ctx.lineWidth=3;ctx.stroke();
-    ctx.fillStyle='#fff';ctx.font='600 12px system-ui';ctx.textBaseline='middle';
-    ctx.fillText('FIRE',fireBtn.x,fireBtn.y); }
   requestAnimationFrame(render);
 }
 requestAnimationFrame(render);
 
-// ---- ui ----
-document.getElementById('modeBtn').onclick=()=>{ mode=mode==='brawl'?'pubg':'brawl';
-  document.getElementById('modeBtn').innerHTML = mode==='brawl'
-    ? 'Brawl<small>release to fire</small>' : 'PUBG<small>aim + trigger</small>'; };
-function stickLabel(){ document.getElementById('stickBtn').innerHTML = fixedStick
-  ? 'Fixed<small>center anchor</small>' : 'Floating<small>tap = center</small>'; }
-document.getElementById('stickBtn').onclick=()=>{ fixedStick=!fixedStick;
-  try{ localStorage.setItem('fixedStick',fixedStick?'1':'0'); }catch(e){} stickLabel(); };
-stickLabel();
-// class picker (lobby): highlight the choice; if already connected, tell the host live
-document.querySelectorAll('#classPick .clsBtn').forEach(b=>{
-  b.onclick=()=>{
-    document.querySelectorAll('#classPick .clsBtn').forEach(x=>x.classList.remove('sel'));
-    b.classList.add('sel'); myClass=b.dataset.class; sendClass();
-  };
+// ---- lobby UI (on the start overlay, so taps are reliable) ----
+document.querySelectorAll('#classPick .opt').forEach(b=>{
+  b.onclick=()=>{ document.querySelectorAll('#classPick .opt').forEach(x=>x.classList.remove('sel'));
+    b.classList.add('sel'); myClass=b.dataset.class; sendClass(); };
 });
-// deploy trigger → one discrete deploy per press
+function syncStick(){ document.querySelectorAll('#stickPick .opt').forEach(x=>
+  x.classList.toggle('sel', (x.dataset.stick==='fixed')===fixedStick)); }
+document.querySelectorAll('#stickPick .opt').forEach(b=>{
+  b.onclick=()=>{ fixedStick = b.dataset.stick==='fixed';
+    try{ localStorage.setItem('fixedStick',fixedStick?'1':'0'); }catch(e){} syncStick(); };
+});
+syncStick();
 const deployBtn=document.getElementById('deployBtn');
 deployBtn.addEventListener('pointerdown',e=>{ e.preventDefault(); sendDeploy();
   if(cfg.haptics&&navigator.vibrate) navigator.vibrate(12); });
@@ -263,8 +247,8 @@ document.getElementById('startBtn').onclick=async()=>{
   try{ await document.documentElement.requestFullscreen(); }catch(e){}
   try{ await screen.orientation.lock('landscape'); }catch(e){}
   document.getElementById('start').style.display='none'; resize(); started=true;
-  deployBtn.style.display='block';            // show the deploy trigger once in
-  sendClass();                                // re-assert class in case we connected after picking
+  deployBtn.style.display='block';
+  sendClass();
 };
 resize(); connect();
 </script>
