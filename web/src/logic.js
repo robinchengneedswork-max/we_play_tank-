@@ -231,12 +231,14 @@ function fireLaser(){
   if(cfg.haptics&&navigator.vibrate) navigator.vibrate(18);
 }
 
-// Wire-guided missile gun-mode: one slow missile at a time, steered toward the current aim while
-// the player holds the aim input (≈2-cell turn radius); released → it flies straight. Dies on a wall.
+// Wire-guided missile gun-mode: steer the missile toward the current aim while the player holds the
+// aim input (≈2-cell turn radius); release ("cut the wire") → it flies straight. Dies on a wall.
+// Only ONE wire can be live at a time — once you cut it you can fire another (cooldown permitting),
+// so several uncontrolled missiles can be in the air at once.
 function fireGuided(){
   const now=performance.now();
   if(now-(tank.lastFire||0) < pCd()*1.4) return;
-  if(shells.some(s=>s.owner===tank && s.guided)) return;   // only one in the air
+  if(shells.some(s=>s.owner===tank && s.guided && s.controlled)) return;   // only one STEERED missile at a time — cut a wire (release aim) to fire another
   tank.lastFire=now; tank.cloak=0;
   const aim=tank.turretAngle, tipX=tank.x+Math.cos(aim)*(tank.r+10), tipY=tank.y+Math.sin(aim)*(tank.r+10);
   shells.push({x:tipX,y:tipY,vx:Math.cos(aim)*GUIDED_SPEED,vy:Math.sin(aim)*GUIDED_SPEED,b:0,life:5,arm:0.16,

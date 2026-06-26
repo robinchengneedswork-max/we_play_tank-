@@ -64,25 +64,28 @@ html,body{height:100%;overflow:hidden;background:#1a1916;
   font-size:18px;font-weight:700;line-height:1.5;touch-action:none;}
 #calib.active{display:flex;}
 
-/* Between-wave upgrade pick */
+/* FTL-style depot: header / store-row / footer, all sized to fit one screen (no scroll). */
 #shop{position:fixed;inset:0;z-index:45;display:none;flex-direction:column;align-items:center;
-  justify-content:center;gap:16px;padding:20px;background:rgba(20,19,16,.78);color:#f3ecd9;touch-action:none;}
+  justify-content:center;gap:clamp(8px,1.6vh,16px);padding:clamp(10px,2.2vh,22px) 20px;
+  background:rgba(20,19,16,.78);color:#f3ecd9;touch-action:none;}
 #shop.active{display:flex;}
-#shop h2{font-size:18px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;opacity:.82;}
-.up-cost{font-size:13px;font-weight:700;opacity:.9;margin-top:-6px;color:#e8c84a;}
-#shopCards{display:flex;gap:10px;flex-wrap:wrap;justify-content:center;max-width:760px;
-  max-height:62vh;overflow-y:auto;padding:4px;}
-.up-card{cursor:pointer;border:none;font:inherit;text-align:left;width:min(42vw,170px);
-  background:#2c2925;color:#f3ecd9;border-radius:14px;padding:15px 16px;box-shadow:0 3px 0 rgba(0,0,0,.35);
-  transition:transform .08s ease;}
-.up-card b{display:block;font-size:16px;font-weight:800;margin-bottom:6px;color:var(--tank);}
-.up-card small{font-size:12.5px;opacity:.78;line-height:1.45;}
+#shop h2{font-size:clamp(15px,2.4vh,18px);font-weight:800;letter-spacing:.06em;text-transform:uppercase;opacity:.82;}
+#shopHead{flex:none;display:flex;flex-direction:column;align-items:center;gap:3px;text-align:center;}
+.up-cost{font-size:13px;font-weight:700;opacity:.9;color:#e8c84a;}
+/* the store row: build panel ("your ship") on the left, item grid on the right */
+#shopMain{flex:1 1 auto;min-height:0;display:flex;gap:16px;align-items:stretch;justify-content:center;
+  width:min(96vw,1080px);}
+#shopCards{flex:1 1 auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));
+  gap:8px;align-content:start;padding:2px;}
+.up-card{cursor:pointer;border:none;font:inherit;text-align:left;
+  background:#2c2925;color:#f3ecd9;border-radius:12px;padding:11px 13px 26px;box-shadow:0 3px 0 rgba(0,0,0,.35);
+  transition:transform .08s ease;position:relative;}
+.up-card b{display:block;font-size:clamp(13px,1.9vh,15px);font-weight:800;margin-bottom:4px;color:var(--tank);}
+.up-card small{font-size:clamp(11px,1.5vh,12px);opacity:.78;line-height:1.32;}
 .up-card:active{transform:translateY(2px);box-shadow:0 1px 0 rgba(0,0,0,.35);}
-/* rarity tiers: a ring + tag colour-code common/rare/rulebreaker; price pinned bottom-right */
-.up-card{position:relative;padding-bottom:30px;}
 .up-tier{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.11em;
-  padding:2px 7px;border-radius:999px;margin-bottom:7px;}
-.up-price{position:absolute;right:14px;bottom:11px;font-size:12px;font-weight:800;color:#e8c84a;}
+  padding:2px 7px;border-radius:999px;margin-bottom:5px;}
+.up-price{position:absolute;right:12px;bottom:8px;font-size:12px;font-weight:800;color:#e8c84a;}
 .up-rare{box-shadow:0 3px 0 rgba(0,0,0,.35),inset 0 0 0 2px #4a86c0;}
 .up-rare .up-tier{background:#2d4f72;color:#bcd8f5;}
 .up-rulebreaker{box-shadow:0 3px 0 rgba(0,0,0,.35),inset 0 0 0 2px #c0954a;}
@@ -90,12 +93,14 @@ html,body{height:100%;overflow:hidden;background:#1a1916;
 .up-locked{opacity:.42;cursor:not-allowed;}
 .up-locked .up-price{color:#d9483b;}
 /* wave-clear salvage line + tank schematic / build readout */
-.shop-salvage{font-size:12.5px;font-weight:800;letter-spacing:.03em;color:#e8c84a;margin-top:-10px;min-height:15px;}
-#shopBuild{display:flex;gap:16px;align-items:center;justify-content:center;flex-wrap:wrap;
-  background:rgba(0,0,0,.22);border-radius:14px;padding:10px 18px;max-width:560px;}
+.shop-salvage{font-size:12.5px;font-weight:800;letter-spacing:.03em;color:#e8c84a;min-height:15px;}
+/* build panel = the "ship" on the left of the store row: tank schematic above the build readout */
+#shopBuild{flex:0 0 auto;width:clamp(190px,23vw,250px);display:flex;flex-direction:column;
+  gap:10px;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.22);border-radius:14px;padding:14px 16px;overflow:auto;}
 #shopBuild:empty{display:none;}
-.build-tank svg{display:block;width:60px;height:auto;}
-.build-info{display:flex;flex-direction:column;gap:3px;font-size:12px;min-width:230px;}
+.build-tank svg{display:block;width:clamp(50px,8vh,76px);height:auto;}
+.build-info{display:flex;flex-direction:column;gap:3px;font-size:12px;width:100%;min-width:0;}
 .bs-load{display:flex;gap:8px;align-items:baseline;}
 .bs-load>span{opacity:.55;width:52px;flex:none;font-size:11px;text-transform:uppercase;letter-spacing:.05em;}
 .bs-load>b{color:#f3ecd9;font-weight:700;}
