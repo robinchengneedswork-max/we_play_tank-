@@ -43,6 +43,18 @@ async function startMode(m, classKey){
   started=true;
 }
 
+// Add the host keyboard+mouse seat on demand (bound to Spacebar in input.js). On a co-op host you
+// usually let phones play, but the operator can drop in a keyboard tank any time.
+function ensureLocalPlayer(){
+  if(LP()) return LP();
+  const p=addPlayer('local', LOCAL_COLOR, 'Keyboard');
+  const ck=(gameMode==='sandbox')?null:(runClassKey||'medium');
+  setupPlayerForRun(p, ck);
+  if(started && gameMode){ resetPlayerToSpawn(p, players.indexOf(p), players.length); p.down=false; }
+  updateHud();
+  return p;
+}
+
 function toMenu(){
   started=false; gameMode=null; paused=false;
   players.length=0;            // drop the seats; startMode re-adds the local one (network players re-join)

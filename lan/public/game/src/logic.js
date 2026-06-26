@@ -249,10 +249,12 @@ const FIRE_ALIGN_TOL=0.14;
 const SPAWN_FIRE_DELAY=550;
 // Predictive fire discipline: march a virtual shell through the bounce physics and refuse a shot that
 // would loop back into us or hit an ALLY (another enemy) before reaching the player it's aimed near.
-function wouldFriendlyFire(e, aim){
+function wouldFriendlyFire(e, aim, tgt){
   const speed=e.shellSpeed||cfg.shell;
-  const tp=nearestPlayer(e.x,e.y);
-  const distToPlayer = tp ? Math.hypot(tp.x-e.x, tp.y-e.y) : 1e9;
+  // measure "is an ally blocking the shot?" against the player we're AIMING AT — not just the nearest
+  // one. With players spread out, using the nearest player shrank this threshold and let enemies fire
+  // through allies that were downrange toward the real target (the multi-player self/ally-kill regression).
+  const distToPlayer = tgt ? Math.hypot(tgt.x-e.x, tgt.y-e.y) : 1e9;
   const sim={ x:e.x+Math.cos(aim)*(e.r+10), y:e.y+Math.sin(aim)*(e.r+10),
               vx:Math.cos(aim)*speed, vy:Math.sin(aim)*speed };
   let b=(e.bounce??cfg.bounce), elapsed=0, travel=0;
@@ -371,13 +373,13 @@ function driveEnemy(e, now){
       e.wanderUntil=now+700+Math.random()*1500;
     }
     let wd=((e.wanderTarget-e.turretAngle+Math.PI)%(2*Math.PI))-Math.PI; e.turretAngle+=wd*0.04;
-    if(now>=e.nextFireAt){ if(tgt && !wouldFriendlyFire(e,e.turretAngle)) fire(e, e.turretAngle); scheduleFire(e,now); }
+    if(now>=e.nextFireAt){ if(tgt && !wouldFriendlyFire(e,e.turretAngle,tgt)) fire(e, e.turretAngle); scheduleFire(e,now); }
   } else if(tgt){
     const aimAng=aimFor(e,tgt);
     let td=((aimAng-e.turretAngle+Math.PI)%(2*Math.PI))-Math.PI; e.turretAngle+=td*0.07;
     if(now>=e.nextFireAt && Math.abs(td)<FIRE_ALIGN_TOL){
       if(e.fireChance>=1 || Math.random()<e.fireChance){
-        if(!wouldFriendlyFire(e,e.turretAngle)) fire(e, e.turretAngle);
+        if(!wouldFriendlyFire(e,e.turretAngle,tgt)) fire(e, e.turretAngle);
       }
       scheduleFire(e,now);
     }
@@ -844,7 +846,7 @@ function finishWave(){
   for(let i=pickups.length-1;i>=0;i--) if(pickups[i].kind==='scrap'){ got+=pickups[i].value; pickups.splice(i,1); }
   run.waveScrap+=got;
   const share = Math.floor(got/Math.max(1,players.length));
-  for(const p of players) p.scrap += STIPEND_PER_WAVE + share;     // flat per-player stipend + an even cut of swept scrap
+  for(const p of players){ p.scrap += STIPEND_PER_WAVE + share; p.down=false; }   // stipend + even cut of swept scrap; wave cleared → revive the whole party (downed players shop + return)
   run.lastWaveScrap = run.waveScrap;
   if(run.waveScrap>0){ const c=partyCenter(); burst(c.x, c.y-20, '#e8c84a', 18); SFX.waveStart(); }
   updateHud();

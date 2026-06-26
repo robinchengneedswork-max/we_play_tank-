@@ -59,6 +59,9 @@ function kbMoveDir(){            // WASD/arrows → movement angle, or null when
 }
 window.addEventListener('keydown',e=>{
   if(['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+  // co-op host: the FIRST Space (when there's no keyboard seat yet) drops in the host keyboard+mouse
+  // player; after that Space fires normally. Solo build already has a 'local' seat, so this never triggers.
+  if(e.code==='Space' && !e.repeat && started && gameMode && !LP() && typeof ensureLocalPlayer==='function'){ ensureLocalPlayer(); return; }
   keys.add(e.code);
 });
 window.addEventListener('keyup',e=>{ keys.delete(e.code); });
