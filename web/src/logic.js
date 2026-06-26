@@ -906,7 +906,7 @@ function maybeDropPickup(x,y){
   else if(r<0.62) pickups.push({x,y,kind:'upgrade',life:11,max:11});
 }
 function applyPickup(p){
-  if(p.kind==='scrap'){ run.scrap+=p.value; burst(p.x,p.y,'#caa46a',6); SFX.hit(); updateHud(); return; }
+  if(p.kind==='scrap'){ run.scrap+=p.value; run.waveScrap+=p.value; burst(p.x,p.y,'#caa46a',6); SFX.hit(); updateHud(); return; }
   if(p.kind==='heal'){ if(run.hp<run.maxHp){ run.hp++; tank.hp=run.hp; } burst(p.x,p.y,'#5fbf6a',14); }
   else { const u=pickUpgrades(1)[0]; if(u) u.apply(); burst(p.x,p.y,'#e8c84a',14); }
   SFX.waveStart(); updateHud();
@@ -943,8 +943,12 @@ function completeSiege(){          // held long enough → attackers break off; 
 // wastes it), then only open the upgrade pick if you can afford it; else roll on.
 function finishWave(){
   let got=0;
-  for(let i=pickups.length-1;i>=0;i--) if(pickups[i].kind==='scrap'){ run.scrap+=pickups[i].value; got+=pickups[i].value; pickups.splice(i,1); }
+  for(let i=pickups.length-1;i>=0;i--) if(pickups[i].kind==='scrap'){ run.scrap+=pickups[i].value; run.waveScrap+=pickups[i].value; got+=pickups[i].value; pickups.splice(i,1); }
   if(got>0){ SFX.hit(); updateHud(); }
+  // Wave-clear celebration: stash this wave's total haul + a gold pop at the player; the figure
+  // is surfaced in the intermission banner (warp) and the depot header (shop waves).
+  run.lastWaveScrap = run.waveScrap;
+  if(run.waveScrap>0){ burst(tank.x, tank.y-tank.r, '#e8c84a', 18); SFX.waveStart(); }
   // Scrap banks; a depot opens every few waves (and after every boss) to spend it. Else fight on.
   if(run.waveKind==='boss' || run.level%SHOP_EVERY===0) openShop();
   else nextWave();

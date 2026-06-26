@@ -59,6 +59,8 @@ calib.addEventListener('pointerdown',e=>{
 const elHits=document.getElementById('statHits');
 const elRun=document.getElementById('statRun');
 const GUN_GLYPH={ laser:'⚡', wireGuided:'➹', scatter:'⁂', bounceRocket:'⤵', apds:'⊳' };
+const GUN_NAME ={ laser:'Laser', wireGuided:'Wire-Guided', scatter:'Scattergun', bounceRocket:'Bounce Rockets', apds:'APDS' };
+const GUN_COLOR={ laser:'#8fe3ff', wireGuided:'#c08af0', scatter:'#f0b24a', bounceRocket:'#7ad6a0', apds:'#e86a5a' };
 function updateHud(){
   elHits.textContent='Hits '+score;
   let s='Lv '+run.level+' · '+'♥'.repeat(Math.max(0,run.hp))+' · ◆'+run.scrap;
@@ -74,6 +76,41 @@ function updateHud(){
 // extra lives, and 2 rolled rulebreakers. Buy as many as you can afford, then leave.
 const shopOverlay=document.getElementById('shop');
 const shopCards=document.getElementById('shopCards');
+let shopFlash=null;   // id of the line bought this click → its card + schematic row pulse once, then cleared
+// A small top-down tank schematic: barrel/centre tinted by the equipped gun-mode, a gold glacis
+// bar when front armour is fitted, red treads for Heavy, a violet ring for Vibranium.
+function tankSchematicSVG(){
+  const gc=GUN_COLOR[run.gunMode]||'#cfc8ba';
+  const tread=tank.tracks?'#7a3b32':'#2c2925';
+  const glacis=tank.armor?'<rect x="20" y="17" width="40" height="8" rx="3" fill="#e8c84a"/>':'';
+  const halo=run.vibranium?'<rect x="13" y="19" width="54" height="62" rx="15" fill="none" stroke="#b98cf0" stroke-width="2.5" opacity=".85"/>':'';
+  return '<svg viewBox="0 0 80 100" aria-hidden="true">'+halo
+    +'<rect x="8" y="22" width="11" height="58" rx="5" fill="'+tread+'"/>'
+    +'<rect x="61" y="22" width="11" height="58" rx="5" fill="'+tread+'"/>'
+    +'<rect x="20" y="24" width="40" height="54" rx="8" fill="#5b5750"/>'+glacis
+    +'<rect x="36.5" y="6" width="7" height="46" rx="2.5" fill="'+gc+'"/>'
+    +'<circle cx="40" cy="54" r="15" fill="#6e695f"/>'
+    +'<circle cx="40" cy="54" r="4.5" fill="'+gc+'"/></svg>';
+}
+function pips(n){ return n>0 ? '●'.repeat(Math.min(n,6))+(n>6?' ×'+n:'') : '·'; }
+// The build readout next to the schematic: chassis / gun / left slot + per-line stat levels (run.buys).
+function renderShopBuild(){
+  const host=document.getElementById('shopBuild'); if(!host) return;
+  const gun = run.gunMode ? (GUN_GLYPH[run.gunMode]||'◗')+' '+(GUN_NAME[run.gunMode]||run.gunMode) : '— standard';
+  const left = run.gadget ? '⚙ '+run.gadget.name+' ('+run.gadgetCharges+'/'+run.gadgetMaxCharges+')'
+             : run.vibranium ? '⚡ Vibranium'
+             : tank.armor ? '🛡 Front Glacis ('+(run.maxPlates||0)+' plates)'
+             : '— empty';
+  const rows = SHOP_STOCK.map(line=>{ const lv=run.buys[line.id]||0;
+    return '<div class="bs-row'+(lv?'':' bs-zero')+(shopFlash===line.id?' just-bought':'')+'">'
+      +'<span class="bs-name">'+line.name+'</span><span class="bs-pips">'+pips(lv)+'</span></div>'; }).join('');
+  host.innerHTML='<div class="build-tank">'+tankSchematicSVG()+'</div>'
+    +'<div class="build-info">'
+      +'<div class="bs-load"><span>Chassis</span><b>'+(run.class?run.class.name:'Standard')+'</b></div>'
+      +'<div class="bs-load"><span>Gun</span><b>'+gun+'</b></div>'
+      +'<div class="bs-load"><span>Left</span><b>'+left+'</b></div>'
+      +'<div class="bs-stats">'+rows+'</div></div>';
+}
 function openShop(){
   run.phase='shop';
   shake=0;                  // kill any leftover shake from the wave-ending hit
@@ -86,46 +123,52 @@ function shopCard(name, desc, cost, opts){
   opts=opts||{};
   const afford = run.scrap>=cost && !opts.disabled;
   const b=document.createElement('button');
-  b.className='up-card '+(opts.cls||'')+(afford?'':' up-locked');
+  b.className='up-card '+(opts.cls||'')+(afford?'':' up-locked')+((opts.flashId&&shopFlash===opts.flashId)?' just-bought':'');
   const tag = opts.tag ? '<span class="up-tier">'+opts.tag+'</span>' : '';
+  const lvl = opts.level ? '<span class="up-lvl">Lv '+opts.level+'</span>' : '';
   const price = opts.sold ? 'SOLD' : (opts.disabled ? opts.disabledLabel||'—' : '◆ '+cost);
-  b.innerHTML=tag+'<b>'+name+'</b><small>'+desc+'</small><span class="up-price">'+price+'</span>';
-  if(afford) b.onclick=()=>{ run.scrap-=cost; opts.onbuy(); updateHud(); renderShop(); };
+  b.innerHTML=tag+lvl+'<b>'+name+'</b><small>'+desc+'</small><span class="up-price">'+price+'</span>';
+  if(afford) b.onclick=()=>{ run.scrap-=cost; opts.onbuy(); shopFlash=opts.flashId||name; SFX.hit(); updateHud(); renderShop(); };
   return b;
 }
 function renderShop(){
   const wt=Math.max(0, run.weight-run.engine);
   document.getElementById('shopBal').textContent =
     '◆ '+run.scrap+' scrap   ·   ♥ '+run.hp+'/'+run.maxHp+' lives   ·   weight '+run.weight+' / engine '+run.engine+(wt>0?'  (−'+Math.round((1-1/(1+0.07*wt))*100)+'% speed)':'');
+  const salv=document.getElementById('shopSalvage');
+  if(salv) salv.textContent = run.lastWaveScrap>0 ? '✦ Salvaged ◆'+run.lastWaveScrap+' from the last push' : '';
+  renderShopBuild();
   shopCards.innerHTML='';
   // stat lines (per-line escalating cost; weighty lines tagged)
   SHOP_STOCK.forEach(line=>{
     const cost=shopLineCost(line);
     shopCards.appendChild(shopCard(line.name, line.desc, cost, {
-      cls: line.weight?'up-rare':'',
+      cls: line.weight?'up-rare':'', level: run.buys[line.id]||0, flashId: line.id,
       onbuy(){ run.buys[line.id]=(run.buys[line.id]||0)+1; if(line.weight) run.weight+=line.weight; line.apply(); }
     }));
   });
   // consumables
   shopCards.appendChild(shopCard('Repair', 'Restore one lost life', REPAIR_COST, {
-    disabled: run.hp>=run.maxHp, disabledLabel:'FULL',
+    disabled: run.hp>=run.maxHp, disabledLabel:'FULL', flashId:'repair',
     onbuy(){ run.hp=Math.min(run.maxHp, run.hp+1); tank.hp=run.hp; }
   }));
   shopCards.appendChild(shopCard('Extra Life', 'Raise max lives by 1 (filled)', LIFE_COST, {
+    flashId:'life',
     onbuy(){ run.maxHp++; run.hp++; tank.maxHp=run.maxHp; tank.hp=run.hp; }
   }));
   if(run.gadget) shopCards.appendChild(shopCard('Rearm: '+run.gadget.name, 'Refill gadget charges', REARM_COST, {
-    disabled: run.gadgetCharges>=run.gadgetMaxCharges, disabledLabel:'FULL',
+    disabled: run.gadgetCharges>=run.gadgetMaxCharges, disabledLabel:'FULL', flashId:'rearm',
     onbuy(){ run.gadgetCharges=run.gadgetMaxCharges; }
   }));
   // 2 rolled rulebreakers (shared escalating price); bought ones drop out of the pair
   run.shopRb.forEach((u,i)=>{
     if(!u) return;
     shopCards.appendChild(shopCard(u.name, u.desc, rbCost(), {
-      cls:'up-rulebreaker', tag:'RULEBREAKER',
+      cls:'up-rulebreaker', tag:'RULEBREAKER', flashId:'rb'+i,
       onbuy(){ u.apply(); run.buys._rb=(run.buys._rb||0)+1; run.shopRb[i]=null; }
     }));
   });
+  shopFlash=null;   // the pulse has been applied to this render; don't carry it to the next
 }
 document.getElementById('shopLeave').onclick=()=>{ shopOverlay.classList.remove('active'); nextWave(); };
 

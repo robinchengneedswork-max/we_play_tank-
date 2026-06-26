@@ -29,6 +29,7 @@ let shake=0;
 // as multipliers/adders (so cfg stays the live-tunable baseline; sandbox = baseline).
 const run={ level:1, kills:0, hp:3, maxHp:3, phase:'fighting', timer:0, mods:freshMods(), siege:null,
             scrap:0, class:null, maxPlates:0, waveKind:'normal',
+            waveScrap:0, lastWaveScrap:0,   // this wave's scrap haul (collected+swept) / the just-cleared wave's haul (for the clear celebration)
             buys:{}, weight:0, engine:0, shopRb:[],   // FTL depot: per-line buy counts, weight vs engine, this shop's rulebreaker roll
             gunMode:null, leftSlotId:null, gadget:null, gadgetCharges:0, gadgetMaxCharges:0, gadgetCdUntil:0, vibranium:false };  // two equip slots: right=gunMode, left=leftSlotId
 function freshMods(){ return {move:1, turret:1, cd:1, shell:1, maxShells:0, bounce:0, fireSlow:1}; }
@@ -36,6 +37,7 @@ function resetRun(){
   run.level=1; run.kills=0; run.maxHp=3; run.hp=run.maxHp;
   run.phase='fighting'; run.timer=0; run.mods=freshMods(); run.siege=null;
   run.scrap=0; run.maxPlates=0; run.waveKind='normal';
+  run.waveScrap=0; run.lastWaveScrap=0;
   run.buys={}; run.weight=0; run.engine=0; run.shopRb=[];
   run.gunMode=null; clearLeftSlot();
   // run.class is set by startMode after resetRun (sandbox leaves it null = cfg baseline)
@@ -344,6 +346,7 @@ function beginWave(){
   mines.length=0; tracks.length=0; shells.length=0; smoke.length=0; particles.length=0; pickups.length=0;
   turrets.length=0; shields.length=0; spiderMines.length=0; beams.length=0; scatterQueue.length=0;   // player deployables don't carry between waves
   resetPlayerToSpawn();          // player to the new map's 'S'
+  run.waveScrap=0;               // fresh haul counter for this wave (shown at the next wave-clear)
   run.waveKind=waveKindFor(run.level);
   // Milestone waves (elite/boss) spawn with extra breathing room + a directional bias so they don't ring you.
   spawnGuard = run.waveKind==='normal' ? null : { minDist: ELITE_SPAWN_DIST, dir: pickSpawnDir() };

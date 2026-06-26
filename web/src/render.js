@@ -270,6 +270,10 @@ function render(){
     ctx.fillStyle=getCSS('--ink');
     ctx.font='800 26px system-ui';ctx.fillText('WAVE '+run.level, W/2, H/2-18);
     ctx.font='800 44px system-ui';ctx.fillText(Math.max(1,Math.ceil(run.timer/1000)), W/2, H/2+24);
+    if(run.level>1 && run.lastWaveScrap>0){    // wave-clear celebration: what you salvaged last push
+      ctx.fillStyle='#e8c84a';ctx.font='800 16px system-ui';
+      ctx.fillText('◆ +'+run.lastWaveScrap+' SCRAP SALVAGED', W/2, H/2+62);
+    }
     ctx.restore();
   }
   // siege hold banner: timer (counts only while you're on the point) + a nudge if you've left it
