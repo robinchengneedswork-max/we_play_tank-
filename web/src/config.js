@@ -37,6 +37,7 @@ const FRONT_ARMOR = { frontArc:Math.PI*0.30, rearArc:Math.PI*0.30, deflect:true 
 const ARMOR_SIDE_FRONT = Math.PI*0.30, ARMOR_SIDE_REAR = Math.PI*0.30;   // face arcs for track-break when no glacis is equipped
 const APDS_PIERCE    = 3;         // tanks an APDS (sabot) round punches through
 const SCATTER_PELLETS = 3;        // pellets per shot with the Scattergun gun-mode
+const SCATTER_GAP     = 85;       // ms between Scattergun pellets (staggered far enough apart they never self-cancel at shell speed)
 
 // ---- rulebreaker arsenal tunables (gun-modes, gadgets, vibranium) ----
 const LASER_RANGE   = 620;        // px total path a laser beam traces (unlimited bounces within it)

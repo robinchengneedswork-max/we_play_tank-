@@ -152,7 +152,7 @@ function updateVibranium(){
 
 // Raw muzzle: spawn one shell from `t` along `aim` (no cooldown/capacity gate) + a
 // muzzle-spark puff. The right-slot gun-mode shapes the player's shell (APDS pierce, bounce-rocket).
-const SPREAD_ARC=0.13;   // rad between Scattergun pellets
+const SPREAD_ARC=0.16;   // rad between Scattergun pellets (slight fan; extra lateral margin so the staggered burst never self-cancels)
 function emitShell(t, aim){
   const isP=(t===tank);
   const speed  = isP? pShell()  : (t.shellSpeed?? cfg.shell);
@@ -162,6 +162,7 @@ function emitShell(t, aim){
   if(isP){   // right-slot gun-mode shapes the player's shell
     if(run.gunMode==='apds'){ sh.pierce=APDS_PIERCE; sh.hitSet=new Set(); sh.rocket=true; sh.b=0; }   // sabot: fast, straight, punches through
     else if(run.gunMode==='bounceRocket') sh.bounceRocket=1;                                           // converts to a homing rocket on its first bounce
+    else if(run.gunMode==='scatter') sh.capWeight=1/SCATTER_PELLETS;                                   // each pellet is 1/N of a magazine slot
   }
   shells.push(sh);
   for(let i=0;i<6;i++){const sp=60+Math.random()*120,ang=aim+(Math.random()-0.5)*0.7;
@@ -176,12 +177,19 @@ function fire(t, aim){
   const cd        = isP? pCd()        : (t.cd        ?? cfg.cd);
   const maxShells = isP? pMaxShells() : (t.maxShells ?? cfg.maxshell);
   if(now-(t.lastFire||0) < cd) return false;
-  let own=0; for(const s of shells) if(s.owner===t) own++;
+  let own=0; for(const s of shells) if(s.owner===t) own += (s.capWeight ?? 1);   // Scattergun pellets weigh 1/N
   if(own>=maxShells) return false;
   t.lastFire=now;
-  const pellets = (isP && run.gunMode==='scatter') ? SCATTER_PELLETS : 1;   // Scattergun gun-mode
-  if(pellets>1){ for(let i=0;i<pellets;i++) emitShell(t, aim + (i-(pellets-1)/2)*SPREAD_ARC); }
-  else emitShell(t, aim);
+  if(isP && run.gunMode==='scatter'){
+    // Scattergun: fire the pellets as a quick staggered burst (one after another, slightly fanned) so
+    // consecutive pellets stay >9px apart and never trip shell-vs-shell cancellation. First fires now;
+    // the rest are queued and emitted by update() (which won't run during the warp-in countdown).
+    for(let i=0;i<SCATTER_PELLETS;i++){
+      const ang = aim + (i-(SCATTER_PELLETS-1)/2)*SPREAD_ARC;
+      if(i===0) emitShell(t, ang);
+      else scatterQueue.push({ at: now + i*SCATTER_GAP, ang });
+    }
+  } else emitShell(t, aim);
   SFX.shoot(isP);
   if(t.team==='player'){
     tank.fireSlowUntil = now + cfg.fireSlowMs;   // firing brakes movement briefly
@@ -191,6 +199,7 @@ function fire(t, aim){
   return true;
 }
 function tryFire(){
+  if(gameMode==='roguelike' && run.phase==='intermission') return;   // can't fire before the wave goes live
   tank.cloak=0;                                   // firing breaks stealth, whatever the gun mode
   if(run.gunMode==='laser'){ fireLaser(); return; }
   if(run.gunMode==='wireGuided'){ fireGuided(); return; }
@@ -617,6 +626,8 @@ function update(dt){
       // auto-fire: hold the aim stick past the ring to keep firing on cooldown
       if(cfg.autofire){ const ap=activePointer('aim'); if(ap && stickVec(ap).raw>cfg.rad) tryFire(); }
       if(fireHeld()) tryFire();    // desktop: hold mouse / space to fire (cooldown-gated)
+      // emit any due Scattergun pellets (staggered burst — see fire())
+      for(let i=scatterQueue.length-1;i>=0;i--){ if(now>=scatterQueue[i].at){ emitShell(tank, scatterQueue[i].ang); scatterQueue.splice(i,1); } }
       const dHeld=deployHeld();    // gadget deploy — edge-triggered so a held input fires once
       if(dHeld && !wasDeploy) deployGadget();
       wasDeploy=dHeld;

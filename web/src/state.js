@@ -20,6 +20,7 @@ let turrets=[];          // player-deployed sentries/trophy {x,y,r,hp,team,kind,
 let shields=[];          // player-deployed one-way arcs {x,y,r,ang,expire}
 let spiderMines=[];      // player-deployed walking mines {x,y,vx,vy,arm,dead}
 let beams=[];            // transient laser draws {pts:[{x,y}...],life,max}
+let scatterQueue=[];     // Scattergun pending pellets {at,ang} — staggered so the volley never self-cancels
 let tracks=[];           // tread marks {x,y,a,life,max} — fade out; cleared between levels
 let score=0;
 let shake=0;
@@ -40,6 +41,10 @@ function resetRun(){
   // run.class is set by startMode after resetRun (sandbox leaves it null = cfg baseline)
 }
 const INTERMISSION_MS=2600;   // breather + countdown before a wave goes live
+// Fair-spacing on milestone (elite/boss) waves: keep enemies farther off the player's spawn and
+// bias them toward one region so there's a clear opening direction (no instant surround).
+const ELITE_SPAWN_DIST=280;   // min px from the player for elite/boss warp spawns (normal waves = 170)
+const GARRISON_MIN_DIST=150;  // soft min px from the player for a siege garrison (best-effort, see garrisonSpawnPos)
 // Siege rework: assault→hold objective. `run.siege` = {phase:'assault'|'hold', timer, max, nextSpawn}.
 const HOLD_MS=22000;          // king-of-the-hill hold duration (ticks only while you're in the zone)
 const REINFORCE_GAP=2600;     // ms between reinforcement spawns during the hold
@@ -207,16 +212,30 @@ function randSpawnPos(){
   return {x:W/2,y:H/2};
 }
 
+// Milestone fair-spacing (set in beginWave for elite/boss waves, null otherwise):
+// {minDist, dir:{x,y}} — enemies stay >=minDist off the player and prefer the `dir` half.
+let spawnGuard=null;
+// A unit vector pointing from the player roughly toward arena center (jittered), so milestone
+// enemies converge from the open side and the space behind the player stays clear.
+function pickSpawnDir(){
+  const base=Math.atan2(H/2-tank.y, W/2-tank.x) + (Math.random()-0.5)*1.2;
+  return {x:Math.cos(base), y:Math.sin(base)};
+}
 // Warp-style enemy spawn: a clear floor point, biased toward the map's 'e' hint
 // cells when it has them, falling back to anywhere valid (never on block/hole/player).
 function enemySpawnPos(){
   const hints=(currentMap&&currentMap.enemyCells)||[];
+  const minD = spawnGuard ? spawnGuard.minDist : 170;
   for(let t=0;t<46;t++){
     let x,y;
     if(hints.length && t<20){ const p=cellToPx(hints[(Math.random()*hints.length)|0]);
       x=p.x+(Math.random()-0.5)*120; y=p.y+(Math.random()-0.5)*120; }   // wide jitter spreads hint clusters
     else { x=FRAME+30+Math.random()*(W-2*FRAME-60); y=FRAME+30+Math.random()*(H-2*FRAME-60); }
-    if(Math.hypot(x-tank.x,y-tank.y)<170) continue;
+    if(Math.hypot(x-tank.x,y-tank.y)<minD) continue;
+    if(spawnGuard && t<30){       // prefer the biased half early, then relax so tight maps still place
+      const dx=x-tank.x, dy=y-tank.y;
+      if(dx*spawnGuard.dir.x+dy*spawnGuard.dir.y<0) continue;
+    }
     const onTerrain=o=>x>o.x-22&&x<o.x+o.w+22&&y>o.y-22&&y<o.y+o.h+22;
     if(blockRects.some(onTerrain)||holeRects.some(onTerrain)||crates.some(onTerrain)) continue;
     const space = t<34 ? 100 : 45;     // keep tanks well apart; relax late so we always find a spot
@@ -247,6 +266,7 @@ function garrisonSpawnPos(){
   if(!holdRect) return enemySpawnPos();
   for(let t=0;t<30;t++){
     const x=holdRect.x+Math.random()*holdRect.w, y=holdRect.y+Math.random()*holdRect.h;
+    if(t<22 && Math.hypot(x-tank.x,y-tank.y)<GARRISON_MIN_DIST) continue;   // keep off the player spawn; relax late so we always place
     const onT=o=>x>o.x-8&&x<o.x+o.w+8&&y>o.y-8&&y<o.y+o.h+8;
     if(blockRects.some(onT)||holeRects.some(onT)||crates.some(onT)) continue;
     return {x,y};
@@ -322,9 +342,11 @@ function waveRoster(level){
 function beginWave(){
   loadNextMap();                 // rotate to a new arena each wave (rebuilds crates at full hp)
   mines.length=0; tracks.length=0; shells.length=0; smoke.length=0; particles.length=0; pickups.length=0;
-  turrets.length=0; shields.length=0; spiderMines.length=0; beams.length=0;   // player deployables don't carry between waves
+  turrets.length=0; shields.length=0; spiderMines.length=0; beams.length=0; scatterQueue.length=0;   // player deployables don't carry between waves
   resetPlayerToSpawn();          // player to the new map's 'S'
   run.waveKind=waveKindFor(run.level);
+  // Milestone waves (elite/boss) spawn with extra breathing room + a directional bias so they don't ring you.
+  spawnGuard = run.waveKind==='normal' ? null : { minDist: ELITE_SPAWN_DIST, dir: pickSpawnDir() };
   // Boss + elite milestones always play as a warp wave (skip siege) so their reward path is clean.
   if(currentMap.def.spawn==='siege' && holdRect && run.waveKind==='normal'){
     // SIEGE: garrison warps into the fortress; you assault, then hold (see updateSiege).
@@ -350,12 +372,14 @@ function resetPlayerToSpawn(){
   tank.brokenSides={pos:false,neg:false};
   tank.plates=run.maxPlates||0;                    // front plates refill each life
   tank.flying=0; tank.cloak=0; tank.charged=false; tank.iframes=0; // arsenal states don't carry across (re)spawns
+  scatterQueue.length=0;                           // drop any in-flight Scattergun burst
 }
 
 // Reset the arena for a fresh start of either mode.
 function resetArena(){
+  spawnGuard=null;               // milestone fair-spacing is per-wave; never leak into sandbox
   shells.length=0; particles.length=0; smoke.length=0; mines.length=0; tracks.length=0; enemies.length=0; pickups.length=0;
-  turrets.length=0; shields.length=0; spiderMines.length=0; beams.length=0;
+  turrets.length=0; shields.length=0; spiderMines.length=0; beams.length=0; scatterQueue.length=0;
   tank.team='player'; tank.maxHp=run.maxHp; tank.hp=run.maxHp;
   score=0;
   if(gameMode==='sandbox'){ loadNextMap(); resetPlayerToSpawn(); spawnSandboxSet(); }
