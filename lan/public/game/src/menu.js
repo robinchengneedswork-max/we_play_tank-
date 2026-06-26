@@ -27,10 +27,16 @@ async function startMode(m, classKey){
   hud.classList.remove('hud-hidden');
   resize();                 // size canvas + bake the map's collision rects for current orientation
   resetRun();               // reset SHARED run state (level / lives / phase)
-  if(players.length===0) addPlayer('local', LOCAL_COLOR, 'P1');   // the host keyboard seat (network players join later)
+  // Add the host keyboard seat only when nobody has joined over the net (solo/testbed use). On a
+  // co-op host with phones already connected, there's no idle keyboard tank — phones are the players.
+  if(players.length===0) addPlayer('local', LOCAL_COLOR, 'P1');
   runClassKey = (m==='roguelike') ? (classKey||runClassKey||'medium') : null;
-  // each player gets its OWN build: class + baked slots (TD = APDS right, Heavy = glacis left + tracks).
-  for(const p of players) setupPlayerForRun(p, runClassKey);      // sandbox: runClassKey null = cfg baseline
+  // each player gets its OWN build from its OWN class: the local seat uses the class screen pick;
+  // network players use the class they chose on their phone (p.classKey), default medium.
+  for(const p of players){
+    const ck = (m==='sandbox') ? null : (p.id==='local' ? runClassKey : (p.classKey || 'medium'));
+    setupPlayerForRun(p, ck);
+  }
   resetArena();
   setHudForMode();
   updateHud();

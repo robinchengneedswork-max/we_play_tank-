@@ -68,6 +68,10 @@ function safeSend(ws, obj) {
   if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj));
 }
 
+// Controller -> host message types the relay forwards (id-tagged). Everything else from a controller
+// is ignored. See lan/public/shared/protocol.js for shapes.
+const C2H = new Set(["input", "fire", "deploy", "classSelect", "ready", "pick", "buy", "shopDone"]);
+
 wss.on("connection", (ws) => {
   ws.role = null;
   ws.pid = null;
@@ -94,19 +98,24 @@ wss.on("connection", (ws) => {
       return;
     }
 
-    // Controller -> host (tag with player id)
+    // Controller -> host (tag with player id). Co-op adds deploy + lobby (classSelect/ready) +
+    // between-wave choices (pick/buy/shopDone). The host simulates; these are all intent.
     if (ws.role === "controller") {
-      if (msg.type === "input" || msg.type === "fire") {
+      if (C2H.has(msg.type)) {
         msg.id = ws.pid;
         safeSend(hostSocket, msg);
       }
       return;
     }
 
-    // Host -> a specific controller (e.g. haptic feedback on a hit)
+    // Host -> a specific controller. `haptic` is the legacy buzz; any other message carrying a `to`
+    // (offer / shop / state ...) is delivered to that one phone with `to` stripped.
     if (ws.role === "host") {
       if (msg.type === "haptic" && msg.to != null) {
         safeSend(controllers.get(msg.to), { type: "haptic", pattern: msg.pattern || [20] });
+      } else if (msg.to != null) {
+        const dst = controllers.get(msg.to);
+        if (dst) { const { to, ...rest } = msg; safeSend(dst, rest); }
       }
       return;
     }

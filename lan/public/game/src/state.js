@@ -17,15 +17,15 @@ function makePlayer(id,color,name){
     brokenSides:{pos:false,neg:false},
     flying:0, cloak:0, charged:false, iframes:0, tracks:false, rocket:false,
     // build (was the per-player half of `run`)
-    class:null, mods:freshMods(), scrap:0, maxPlates:0,
+    class:null, classKey:null, mods:freshMods(), scrap:0, maxPlates:0,
     buys:{}, weight:0, engine:0, shopRb:[],
     gunMode:null, leftSlotId:null, gadget:null, gadgetCharges:0, gadgetMaxCharges:0, gadgetCdUntil:0, vibranium:false,
     // co-op status
     down:false, scatterQueue:[],            // spectate-till-clear; per-player staggered Scattergun burst
     intent:freshIntent() };
 }
-let players=[];          // all player tanks (the local keyboard seat is players[0]; the rest join over the net)
-function LP(){ return players[0]; }                       // the local (host keyboard) player, if any
+let players=[];          // all player tanks (the local keyboard seat has id 'local'; the rest join over the net)
+function LP(){ for(const p of players) if(p.id==='local') return p; return null; }   // the host keyboard seat, or null (phones-only host)
 function livingPlayers(){ return players.filter(p=>!p.down); }
 function activePlayers(){ return players.filter(p=>!p.down); }   // alias: "in the field" == not downed
 function partyCenter(){ const ps=livingPlayers(); if(!ps.length) return {x:W/2,y:H/2};
@@ -171,6 +171,7 @@ function pickUpgrades(n, tierFilter){
 // ---- player run setup (per player, from a chosen class) ----
 // Mirrors the old startMode baked-slot block, but per player. classKey null = cfg baseline (sandbox).
 function setupPlayerForRun(p, classKey){
+  p.classKey = classKey || null;
   p.class = classKey ? CLASSES[classKey] : null;
   p.mods = freshMods();
   p.scrap=0; p.buys={}; p.weight=0; p.engine=0; p.shopRb=[];

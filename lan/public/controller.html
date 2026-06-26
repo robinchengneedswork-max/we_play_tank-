@@ -32,6 +32,15 @@
   #start p{font-size:14px;opacity:.7;max-width:320px;line-height:1.5;}
   #startBtn{margin-top:8px;padding:14px 30px;border:none;border-radius:12px;background:#3b6fb5;
     color:#fff;font-size:16px;font-weight:700;cursor:pointer;}
+  #classPick{display:flex;flex-wrap:wrap;gap:8px;justify-content:center;max-width:360px;margin-top:4px;}
+  .clsBtn{padding:9px 14px;border:2px solid #3a3833;border-radius:10px;background:#26241f;color:#e9e2cf;
+    font-size:13px;font-weight:700;cursor:pointer;}
+  .clsBtn.sel{border-color:#e8c84a;background:#3a3320;color:#fff;}
+  /* deploy trigger (left index) — only useful once a gadget is equipped, but always available */
+  #deployBtn{position:fixed;left:16px;bottom:16px;z-index:6;width:58px;height:58px;border-radius:50%;
+    border:3px solid rgba(255,255,255,.7);background:rgba(95,160,210,.82);color:#fff;font-size:22px;
+    font-weight:800;cursor:pointer;display:none;}
+  #deployBtn:active{background:rgba(95,160,210,1);}
 </style>
 </head>
 <body>
@@ -46,9 +55,16 @@
 </div>
 <div id="start">
   <h1>Tank Arena Controller</h1>
-  <p>Left thumb drives, right thumb aims. Toggle Brawl (release the aim stick to fire, release in the center to cancel) vs PUBG (aim only + the FIRE trigger, top-right).</p>
+  <p>Left thumb drives, right thumb aims. Pick your tank, then tap to join. Toggle Brawl (release the aim stick to fire) vs PUBG (aim only + FIRE trigger) once in.</p>
+  <div id="classPick">
+    <button class="clsBtn sel" data-class="medium">Medium</button>
+    <button class="clsBtn" data-class="light">Light</button>
+    <button class="clsBtn" data-class="destroyer">Tank Destroyer</button>
+    <button class="clsBtn" data-class="heavy">Heavy</button>
+  </div>
   <button id="startBtn">Tap to join</button>
 </div>
+<button id="deployBtn" aria-label="Deploy gadget">⚙</button>
 
 <script src="/shared/protocol.js"></script>
 <script>
@@ -82,7 +98,8 @@ function connect(){
   ws.onmessage=(e)=>{ let m; try{m=JSON.parse(e.data);}catch{return;}
     if(m.type==='assigned'){ myId=m.id; myColor=m.color;
       document.getElementById('who').textContent='You are P'+m.id;
-      document.getElementById('who').style.color=m.color; }
+      document.getElementById('who').style.color=m.color;
+      sendClass(); }                       // tell the host which tank we picked
     if(m.type==='haptic' && cfg.haptics && navigator.vibrate) navigator.vibrate(m.pattern||[20]);
   };
 }
@@ -90,6 +107,9 @@ function setConn(s,t){ const d=document.getElementById('dot');
   d.className=s==='ok'?'ok':s==='bad'?'bad':''; document.getElementById('connTxt').textContent=t; }
 function sendInput(mx,my,aim,aiming){ if(wsReady) ws.send(JSON.stringify({type:'input',mx,my,aim,aiming})); }
 function sendFire(aim){ if(wsReady) ws.send(JSON.stringify({type:'fire',aim})); }
+function sendDeploy(){ if(wsReady) ws.send(JSON.stringify({type:'deploy'})); }
+let myClass='medium';
+function sendClass(){ if(wsReady) ws.send(JSON.stringify({type:'classSelect',class:myClass})); }
 
 // ---- pointer -> stick role ----
 const pointers=new Map();
@@ -172,10 +192,24 @@ function stickLabel(){ document.getElementById('stickBtn').innerHTML = fixedStic
 document.getElementById('stickBtn').onclick=()=>{ fixedStick=!fixedStick;
   try{ localStorage.setItem('fixedStick',fixedStick?'1':'0'); }catch(e){} stickLabel(); };
 stickLabel();
+// class picker (lobby): highlight the choice; if already connected, tell the host live
+document.querySelectorAll('#classPick .clsBtn').forEach(b=>{
+  b.onclick=()=>{
+    document.querySelectorAll('#classPick .clsBtn').forEach(x=>x.classList.remove('sel'));
+    b.classList.add('sel'); myClass=b.dataset.class; sendClass();
+  };
+});
+// deploy trigger → one discrete deploy per press
+const deployBtn=document.getElementById('deployBtn');
+deployBtn.addEventListener('pointerdown',e=>{ e.preventDefault(); sendDeploy();
+  if(cfg.haptics&&navigator.vibrate) navigator.vibrate(12); });
+
 document.getElementById('startBtn').onclick=async()=>{
   try{ await document.documentElement.requestFullscreen(); }catch(e){}
   try{ await screen.orientation.lock('landscape'); }catch(e){}
   document.getElementById('start').style.display='none'; resize(); started=true;
+  deployBtn.style.display='block';            // show the deploy trigger once in
+  sendClass();                                // re-assert class in case we connected after picking
 };
 resize(); connect();
 </script>
