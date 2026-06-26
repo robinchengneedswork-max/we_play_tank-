@@ -58,10 +58,14 @@ function ensureLocalPlayer(){
 function toMenu(){
   started=false; gameMode=null; paused=false;
   players.length=0;            // drop the seats; startMode re-adds the local one (network players re-join)
-  ['gameover','sbUp','shop'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  ['gameover','sbUp','shop','pause'].forEach(id=>document.getElementById(id).classList.remove('active'));
   hud.classList.add('hud-hidden');
   showScreen('screen-menu');   // stay in fullscreen so re-entering a mode is instant
 }
+
+// Pause: the ☰ button freezes the sim (paused) and shows the pause overlay; Back-to-menu lives here.
+function openPause(){ if(!started) return; paused=true; document.getElementById('pause').classList.add('active'); }
+function closePause(){ paused=false; document.getElementById('pause').classList.remove('active'); }
 
 document.getElementById('btnSandbox').onclick   = ()=>startMode('sandbox');
 document.getElementById('btnRoguelike').onclick = ()=>showScreen('screen-class');   // choose a class first
@@ -70,4 +74,6 @@ document.getElementById('classBack').onclick    = ()=>showScreen('screen-menu');
 document.querySelectorAll('#screen-class [data-class]').forEach(b=>{
   b.onclick = ()=>startMode('roguelike', b.dataset.class);
 });
-document.getElementById('menuBtn').onclick      = toMenu;
+document.getElementById('menuBtn').onclick      = openPause;
+document.getElementById('pauseResume').onclick  = closePause;
+document.getElementById('pauseMenu').onclick    = ()=>{ closePause(); toMenu(); };

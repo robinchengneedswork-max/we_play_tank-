@@ -120,12 +120,13 @@ html,body{height:100%;overflow:hidden;background:#1a1916;
 .up-card.just-bought{animation:buyPop .42s ease;}
 .bs-row.just-bought{animation:rowPulse .55s ease;}
 
-/* Game-over + sandbox-upgrade overlays (share the upgrade-overlay look) */
-#gameover,#sbUp{position:fixed;inset:0;z-index:45;display:none;flex-direction:column;align-items:center;
+/* Game-over + sandbox-upgrade + pause overlays (share the upgrade-overlay look) */
+#gameover,#sbUp,#pause{position:fixed;inset:0;z-index:46;display:none;flex-direction:column;align-items:center;
   justify-content:center;gap:16px;padding:24px;background:rgba(20,19,16,.8);color:#f3ecd9;touch-action:none;}
-#gameover.active,#sbUp.active{display:flex;}
+#gameover.active,#sbUp.active,#pause.active{display:flex;}
 #gameover h2{font-size:32px;font-weight:900;letter-spacing:.05em;text-transform:uppercase;color:#d9483b;}
 #sbUp h2{font-size:18px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;opacity:.82;}
+#pause h2{font-size:28px;font-weight:900;letter-spacing:.06em;text-transform:uppercase;opacity:.9;}
 #goStats{font-size:15px;opacity:.82;}
 .go-btns{display:flex;gap:12px;align-items:center;flex-wrap:wrap;justify-content:center;}
 #sbUpList{display:flex;flex-direction:column;gap:9px;width:min(94vw,680px);max-height:72vh;overflow-y:auto;padding:4px 6px;}
