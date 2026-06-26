@@ -10,6 +10,16 @@ This file is the source of truth for architecture and decisions. Read it before 
 
 ## Repo layout (two builds)
 
+> **Sprint B (couch co-op merge) is underway — engine map is changing.** The `web/` single-player
+> build is now **frozen as the solo testbed** (git tag `single-player-testbed`, the last pre-merge
+> commit). It still deploys to Vercel for solo feel-testing, but the *living* codebase going forward is
+> a **fork of `web/src` inside the LAN build** (`lan/public/game/`), refactored from the singleton
+> `tank` to a `players[]` array for couch co-op. The old `lan/public/host.html` engine is being
+> retired (no third copy). Plan: `~/.claude/plans/spec-till-clear-ff-nifty-abelson.md`. Decisions:
+> per-player tanks, lives = full-party-wipes, spectate-till-clear, friendly fire ON, scrap = on-map
+> race + flat per-wave stipend, PvP deferred, design for 4 (tolerate 8). Sections below describe the
+> pre-merge layout; treat them as the spec the co-op fork is built from.
+
 The repo holds **two separate builds** of the game, plus the feel baseline:
 
 - **`web/`** — the **single-player** build, deployed to **Vercel** (static, no server). Phones (or

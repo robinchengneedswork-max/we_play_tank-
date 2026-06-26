@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<title>Tank Arena</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<canvas id="game"></canvas>
+
+<!-- In-game HUD (hidden until a mode starts) -->
+<div id="hud" class="hud-hidden">
+  <div class="hud-group">
+    <button id="menuBtn" aria-label="Back to menu">☰</button>
+    <button id="gear" aria-label="Tuning">⚙</button>
+    <button id="sbUpgradeBtn" aria-label="Sandbox upgrades" hidden>⬆</button>
+    <button id="sbMapBtn" aria-label="Next map" hidden>🗺</button>
+  </div>
+  <div class="hud-group">
+    <div class="pill" id="statHits">Hits 0</div>
+    <div class="pill" id="statRun" hidden>Lv 1 · 0 kills</div>
+  </div>
+</div>
+
+<!-- Settings: the live tuning panel, opened from the menu and the in-game gear -->
+<div id="panel">
+  <button id="closePanel" aria-label="Close">×</button>
+  <h2>Feel tuning</h2>
+  <div class="row"><label>Move speed<span id="vMove"></span></label><input id="move" type="range" min="120" max="520" step="10"></div>
+  <div class="row"><label>Turret weight (lerp)<span id="vTurret"></span></label><input id="turret" type="range" min="0.05" max="1" step="0.01"></div>
+  <div class="row"><label>Body turn ease<span id="vBody"></span></label><input id="body" type="range" min="0.05" max="1" step="0.01"></div>
+  <div class="row"><label>Shell speed<span id="vShell"></span></label><input id="shell" type="range" min="240" max="900" step="20"></div>
+  <div class="row"><label>Shell bounces<span id="vBounce"></span></label><input id="bounce" type="range" min="0" max="4" step="1"></div>
+  <div class="row"><label>Fire cooldown (ms)<span id="vCd"></span></label><input id="cd" type="range" min="0" max="900" step="20"></div>
+  <div class="row"><label>Cancel deadzone (Brawl)<span id="vDz"></span></label><input id="dz" type="range" min="0" max="60" step="2"></div>
+  <div class="row"><label>Stick radius<span id="vRad"></span></label><input id="rad" type="range" min="50" max="130" step="5"></div>
+  <div class="row"><label>Max shells on screen<span id="vMax"></span></label><input id="maxshell" type="range" min="1" max="8" step="1"></div>
+  <div class="toggle"><span>Aim trajectory preview</span><input id="preview" type="checkbox"></div>
+  <div class="toggle"><span>Haptics</span><input id="haptics" type="checkbox"></div>
+  <div class="toggle"><span>Sound</span><input id="sound" type="checkbox"></div>
+  <div class="toggle"><span>Screen shake</span><input id="shake" type="checkbox"></div>
+  <hr class="panel-sep">
+  <button id="modeBtn">Fire model: Brawl<small>release stick to fire</small></button>
+  <div class="toggle"><span>Fixed stick</span><input id="fixedStick" type="checkbox"></div>
+  <button id="calibBtn" class="panel-btn">Set stick centers…</button>
+  <div class="toggle"><span>Auto-fire (push aim out)</span><input id="autofire" type="checkbox"></div>
+  <div class="row"><label>Fire slow amount<span id="vFireSlow"></span></label><input id="fireSlow" type="range" min="0" max="180" step="10"></div>
+  <div class="row"><label>Fire slow time (ms)<span id="vFireSlowMs"></span></label><input id="fireSlowMs" type="range" min="0" max="600" step="50"></div>
+  <button id="reset">Reset to defaults</button>
+  <button id="forceReload" class="panel-btn">↻ Force reload (get latest)</button>
+</div>
+
+<!-- Fixed-stick center calibration overlay -->
+<div id="calib"><p id="calibText"></p></div>
+
+<!-- Supply Depot (FTL-style shop, opens between waves on a cadence) -->
+<div id="shop">
+  <div id="shopHead">
+    <h2>Supply Depot</h2>
+    <p id="shopBal" class="up-cost"></p>
+    <p id="shopSalvage" class="shop-salvage"></p>
+  </div>
+  <div id="shopMain">
+    <div id="shopBuild"></div>
+    <div id="shopCards"></div>
+  </div>
+  <button id="shopLeave" class="menu-btn ghost">Leave the depot →</button>
+</div>
+
+<!-- Game over / run summary -->
+<div id="gameover">
+  <h2>Game Over</h2>
+  <p id="goStats"></p>
+  <div class="go-btns">
+    <button class="menu-btn primary" id="goRetry">Retry<small>new run</small></button>
+    <button class="menu-btn ghost" id="goMenu">Menu</button>
+  </div>
+</div>
+
+<!-- Sandbox upgrade tester -->
+<div id="sbUp">
+  <h2>Sandbox Lab</h2>
+  <div id="sbUpList"></div>
+  <div class="go-btns">
+    <button class="panel-btn" id="sbUpClear">Clear all</button>
+    <button class="menu-btn ghost" id="sbUpClose">Done</button>
+  </div>
+</div>
+
+<!-- Shown only in portrait — the game is landscape-first -->
+<div id="rotate"><div class="rotate-icon">↻</div><p>Rotate your device to landscape</p></div>
+
+<!-- ===== Screens ===== -->
+<div id="screen-menu" class="screen active">
+  <div class="menu-card">
+    <h1>TANK<span>ARENA</span></h1>
+    <p class="tagline">twin-stick tank roguelike · solo testbed</p>
+    <button class="menu-btn primary" id="btnRoguelike">Start Run<small>roguelike — survive escalating waves</small></button>
+    <button class="menu-btn" id="btnSandbox">Sandbox<small>free play · test weapons &amp; upgrades</small></button>
+    <button class="menu-btn ghost" id="btnSettings">Settings</button>
+  </div>
+  <p class="menu-hint">Phone: left thumb drives · right thumb aims · Laptop: WASD + mouse to aim, click/space to fire</p>
+</div>
+
+<!-- Class picker (shown when starting a run) -->
+<div id="screen-class" class="screen">
+  <div class="menu-card">
+    <h1>PICK<span>YOUR TANK</span></h1>
+    <button class="menu-btn primary" data-class="medium">Medium<small>balanced · 2 ricochet · 3 shells</small></button>
+    <button class="menu-btn" data-class="light">Light<small>fast · no ricochet · 2 shells</small></button>
+    <button class="menu-btn" data-class="destroyer">Tank Destroyer<small>slow · APDS piercing gun · locked frontal traverse</small></button>
+    <button class="menu-btn" data-class="heavy">Heavy<small>slow · breakable side tracks · starts with a front glacis</small></button>
+    <button class="menu-btn ghost" id="classBack">Back</button>
+  </div>
+</div>
+
+<!-- Load order = dependency order (modules share global scope, no bundler). -->
+<script src="src/config.js"></script>
+<script src="src/maps.js"></script>
+<script src="src/audio.js"></script>
+<script src="src/data/types.js"></script>
+<script src="src/state.js"></script>
+<script src="src/input.js"></script>
+<script src="src/logic.js"></script>
+<script src="src/render.js"></script>
+<script src="src/ui.js"></script>
+<script src="src/menu.js"></script>
+<script src="src/main.js"></script>
+</body>
+</html>

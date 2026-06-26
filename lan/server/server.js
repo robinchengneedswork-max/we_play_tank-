@@ -51,6 +51,7 @@ const server = http.createServer((req, res) => {
   let rel = url === "/" ? "/host.html"
           : url === "/host" ? "/host.html"
           : url === "/controller" ? "/controller.html"
+          : (url === "/game" || url === "/game/") ? "/game/index.html"   // Sprint B: the forked engine (single-player checkpoint)
           : url;
   const file = path.join(PUBLIC, path.normalize(rel));
   if (!file.startsWith(PUBLIC)) return send(res, 403, "Forbidden");
