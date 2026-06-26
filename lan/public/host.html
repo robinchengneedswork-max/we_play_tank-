@@ -26,30 +26,21 @@
   </div>
 </div>
 
-<!-- Settings: the live tuning panel -->
+<!-- Settings: input + options only (gameplay feel is baked; the tuning sliders were removed). -->
 <div id="panel">
   <button id="closePanel" aria-label="Close">×</button>
-  <h2>Feel tuning</h2>
-  <div class="row"><label>Move speed<span id="vMove"></span></label><input id="move" type="range" min="120" max="520" step="10"></div>
-  <div class="row"><label>Turret weight (lerp)<span id="vTurret"></span></label><input id="turret" type="range" min="0.05" max="1" step="0.01"></div>
-  <div class="row"><label>Body turn ease<span id="vBody"></span></label><input id="body" type="range" min="0.05" max="1" step="0.01"></div>
-  <div class="row"><label>Shell speed<span id="vShell"></span></label><input id="shell" type="range" min="240" max="900" step="20"></div>
-  <div class="row"><label>Shell bounces<span id="vBounce"></span></label><input id="bounce" type="range" min="0" max="4" step="1"></div>
-  <div class="row"><label>Fire cooldown (ms)<span id="vCd"></span></label><input id="cd" type="range" min="0" max="900" step="20"></div>
-  <div class="row"><label>Cancel deadzone (Brawl)<span id="vDz"></span></label><input id="dz" type="range" min="0" max="60" step="2"></div>
-  <div class="row"><label>Stick radius<span id="vRad"></span></label><input id="rad" type="range" min="50" max="130" step="5"></div>
-  <div class="row"><label>Max shells on screen<span id="vMax"></span></label><input id="maxshell" type="range" min="1" max="8" step="1"></div>
-  <div class="toggle"><span>Aim trajectory preview</span><input id="preview" type="checkbox"></div>
-  <div class="toggle"><span>Haptics</span><input id="haptics" type="checkbox"></div>
-  <div class="toggle"><span>Sound</span><input id="sound" type="checkbox"></div>
-  <div class="toggle"><span>Screen shake</span><input id="shake" type="checkbox"></div>
-  <hr class="panel-sep">
+  <h2>Controls &amp; options</h2>
   <button id="modeBtn">Fire model: Brawl<small>release stick to fire</small></button>
   <div class="toggle"><span>Fixed stick</span><input id="fixedStick" type="checkbox"></div>
   <button id="calibBtn" class="panel-btn">Set stick centers…</button>
   <div class="toggle"><span>Auto-fire (push aim out)</span><input id="autofire" type="checkbox"></div>
-  <div class="row"><label>Fire slow amount<span id="vFireSlow"></span></label><input id="fireSlow" type="range" min="0" max="180" step="10"></div>
-  <div class="row"><label>Fire slow time (ms)<span id="vFireSlowMs"></span></label><input id="fireSlowMs" type="range" min="0" max="600" step="50"></div>
+  <div class="row"><label>Cancel deadzone (Brawl)<span id="vDz"></span></label><input id="dz" type="range" min="0" max="60" step="2"></div>
+  <div class="row"><label>Stick radius<span id="vRad"></span></label><input id="rad" type="range" min="50" max="130" step="5"></div>
+  <hr class="panel-sep">
+  <div class="toggle"><span>Aim trajectory preview</span><input id="preview" type="checkbox"></div>
+  <div class="toggle"><span>Haptics</span><input id="haptics" type="checkbox"></div>
+  <div class="toggle"><span>Sound</span><input id="sound" type="checkbox"></div>
+  <div class="toggle"><span>Screen shake</span><input id="shake" type="checkbox"></div>
   <button id="reset">Reset to defaults</button>
   <button id="forceReload" class="panel-btn">↻ Force reload (get latest)</button>
 </div>

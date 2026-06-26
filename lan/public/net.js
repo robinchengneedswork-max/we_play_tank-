@@ -74,24 +74,26 @@ const NET = (() => {
   }
 
   // ---- player lifecycle ----
+  function spawnInto(p){            // drop a player straight into the live wave (active, at the map spawn)
+    setupPlayerForRun(p, p.classKey);
+    resetPlayerToSpawn(p, players.indexOf(p), players.length);
+    p.down=false;
+  }
   function join(m){
     if(pid(m.id)) return;
     const color = m.color || COLORS[(players.length)%COLORS.length];
     const p = addPlayer(m.id, color, m.name || ('P'+m.id));
     p.classKey='medium';                                   // default until the phone sends classSelect
-    if(inRun()){                                            // mid-run join: set up + spawn, spectate till next wave
-      setupPlayerForRun(p, p.classKey);
-      resetPlayerToSpawn(p, players.indexOf(p), players.length);
-      p.down = (run.phase==='fighting');
-    }
+    if(inRun()) spawnInto(p);                              // joined mid-run → spawn now (no spectate-till-next-wave)
     renderRoster();
   }
   function leave(m){ removePlayer(m.id); renderRoster(); }
   function classSelect(m){
     const p=pid(m.id); if(!p) return;
     p.classKey=m.class;
-    // safe to (re)apply before the run, or while the player is still spectating (no upgrades yet)
-    if(!inRun() || p.down){ if(inRun()){ setupPlayerForRun(p,m.class); resetPlayerToSpawn(p, players.indexOf(p), players.length); p.down=true; } }
+    // The phone can only change class from its join screen (before its tank is built up), so re-applying
+    // the class — and respawning active — is safe and makes the chosen tank take effect on join.
+    if(inRun()) spawnInto(p);
     renderRoster();
   }
 

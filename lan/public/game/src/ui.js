@@ -21,17 +21,20 @@ const binds=[['move','vMove',v=>v],['turret','vTurret',v=>(+v).toFixed(2)],
   ['cd','vCd',v=>v],['dz','vDz',v=>v],['rad','vRad',v=>v],['maxshell','vMax',v=>v],
   ['fireSlow','vFireSlow',v=>v],['fireSlowMs','vFireSlowMs',v=>v]];
 const TOGGLES=['preview','haptics','sound','shake','fixedStick','autofire'];
+// NOTE: a build can include only a SUBSET of these controls (the co-op host trims the gameplay-tuning
+// sliders, keeping input + sound/haptics/shake). Every lookup is null-guarded so a missing control is
+// simply skipped — the same ui.js drives both the full single-player panel and the trimmed host panel.
 function syncPanel(){
-  binds.forEach(([id,lbl,fmt])=>{const el=document.getElementById(id);
-    el.value=cfg[id]; document.getElementById(lbl).textContent=fmt(cfg[id]);});
-  TOGGLES.forEach(id=>document.getElementById(id).checked=cfg[id]);
+  binds.forEach(([id,lbl,fmt])=>{const el=document.getElementById(id); if(!el)return;
+    el.value=cfg[id]; const l=document.getElementById(lbl); if(l) l.textContent=fmt(cfg[id]);});
+  TOGGLES.forEach(id=>{const t=document.getElementById(id); if(t) t.checked=cfg[id];});
 }
-binds.forEach(([id,lbl,fmt])=>{const el=document.getElementById(id);
+binds.forEach(([id,lbl,fmt])=>{const el=document.getElementById(id); if(!el)return;
   el.addEventListener('input',()=>{cfg[id]=parseFloat(el.value);
-    document.getElementById(lbl).textContent=fmt(cfg[id]); savePrefs();});});
-TOGGLES.forEach(id=>{document.getElementById(id)
-  .addEventListener('change',e=>{cfg[id]=e.target.checked; savePrefs();});});
-document.getElementById('reset').onclick=()=>{Object.assign(cfg,DEFAULTS);syncPanel();savePrefs();};
+    const l=document.getElementById(lbl); if(l) l.textContent=fmt(cfg[id]); savePrefs();});});
+TOGGLES.forEach(id=>{const t=document.getElementById(id); if(t)
+  t.addEventListener('change',e=>{cfg[id]=e.target.checked; savePrefs();});});
+const resetBtn=document.getElementById('reset'); if(resetBtn) resetBtn.onclick=()=>{Object.assign(cfg,DEFAULTS);syncPanel();savePrefs();};
 syncPanel();
 
 // ---- fixed-stick center calibration (2 taps: left thumb, then right thumb) ----
