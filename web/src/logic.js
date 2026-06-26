@@ -699,7 +699,10 @@ function update(dt){
       const held = !!activePointer('aim') || (mouseAim&&mouseDown) || keys.has('Space');
       if(sh.controlled && held){
         const cur=Math.atan2(sh.vy,sh.vx);
-        const d=((tank.turretAngle-cur+Math.PI)%(2*Math.PI))-Math.PI;
+        // shortest signed turn toward the aim. atan2(sin,cos) normalizes to [-π,π] for ANY
+        // input — the old ((d+π)%2π)-π biased one way when d<-π (JS % is negative for negatives),
+        // which spun the missile the wrong way ("always turns left").
+        const dRaw=tank.turretAngle-cur, d=Math.atan2(Math.sin(dRaw),Math.cos(dRaw));
         const omega=(GUIDED_SPEED/GUIDED_TURNRAD)*dt, turn=Math.max(-omega,Math.min(omega,d));
         const na=cur+turn, spd=Math.hypot(sh.vx,sh.vy);
         sh.vx=Math.cos(na)*spd; sh.vy=Math.sin(na)*spd;

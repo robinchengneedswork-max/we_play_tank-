@@ -66,26 +66,29 @@ html,body{height:100%;overflow:hidden;background:#1a1916;
 
 /* FTL-style depot: header / store-row / footer, all sized to fit one screen (no scroll). */
 #shop{position:fixed;inset:0;z-index:45;display:none;flex-direction:column;align-items:center;
-  justify-content:center;gap:clamp(8px,1.6vh,16px);padding:clamp(10px,2.2vh,22px) 20px;
+  justify-content:center;gap:clamp(5px,1.1vh,12px);padding:clamp(7px,1.4vh,15px) 14px;
   background:rgba(20,19,16,.78);color:#f3ecd9;touch-action:none;}
 #shop.active{display:flex;}
-#shop h2{font-size:clamp(15px,2.4vh,18px);font-weight:800;letter-spacing:.06em;text-transform:uppercase;opacity:.82;}
-#shopHead{flex:none;display:flex;flex-direction:column;align-items:center;gap:3px;text-align:center;}
-.up-cost{font-size:13px;font-weight:700;opacity:.9;color:#e8c84a;}
+#shop h2{font-size:clamp(14px,2.1vh,17px);font-weight:800;letter-spacing:.06em;text-transform:uppercase;opacity:.82;}
+#shopHead{flex:none;display:flex;flex-direction:column;align-items:center;gap:2px;text-align:center;}
+.up-cost{font-size:12.5px;font-weight:700;opacity:.9;color:#e8c84a;}
 /* the store row: build panel ("your ship") on the left, item grid on the right */
-#shopMain{flex:1 1 auto;min-height:0;display:flex;gap:16px;align-items:stretch;justify-content:center;
-  width:min(96vw,1080px);}
-#shopCards{flex:1 1 auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(148px,1fr));
-  gap:8px;align-content:start;padding:2px;}
+#shopMain{flex:1 1 auto;min-height:0;display:flex;gap:12px;align-items:stretch;justify-content:center;
+  width:min(97vw,1080px);}
+/* Card area fills the store row. It's sized to fit one screen on a TV / larger phone (no scrollbar
+   appears); on the shortest landscape phones it scrolls INTERNALLY as a safety net so the bottom
+   cards + the Leave button (pinned outside this box) are never cut off. */
+#shopCards{flex:1 1 auto;min-height:0;overflow-y:auto;display:grid;
+  grid-template-columns:repeat(auto-fill,minmax(128px,1fr));gap:7px;align-content:start;padding:1px;}
 .up-card{cursor:pointer;border:none;font:inherit;text-align:left;
-  background:#2c2925;color:#f3ecd9;border-radius:12px;padding:11px 13px 26px;box-shadow:0 3px 0 rgba(0,0,0,.35);
+  background:#2c2925;color:#f3ecd9;border-radius:11px;padding:9px 11px 21px;box-shadow:0 3px 0 rgba(0,0,0,.35);
   transition:transform .08s ease;position:relative;}
-.up-card b{display:block;font-size:clamp(13px,1.9vh,15px);font-weight:800;margin-bottom:4px;color:var(--tank);}
-.up-card small{font-size:clamp(11px,1.5vh,12px);opacity:.78;line-height:1.32;}
+.up-card b{display:block;font-size:clamp(12px,1.7vh,14px);font-weight:800;margin-bottom:3px;color:var(--tank);}
+.up-card small{font-size:clamp(10px,1.35vh,11.5px);opacity:.78;line-height:1.27;}
 .up-card:active{transform:translateY(2px);box-shadow:0 1px 0 rgba(0,0,0,.35);}
-.up-tier{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.11em;
-  padding:2px 7px;border-radius:999px;margin-bottom:5px;}
-.up-price{position:absolute;right:12px;bottom:8px;font-size:12px;font-weight:800;color:#e8c84a;}
+.up-tier{display:inline-block;font-size:8.5px;font-weight:800;letter-spacing:.1em;
+  padding:1px 6px;border-radius:999px;margin-bottom:4px;}
+.up-price{position:absolute;right:10px;bottom:6px;font-size:11.5px;font-weight:800;color:#e8c84a;}
 .up-rare{box-shadow:0 3px 0 rgba(0,0,0,.35),inset 0 0 0 2px #4a86c0;}
 .up-rare .up-tier{background:#2d4f72;color:#bcd8f5;}
 .up-rulebreaker{box-shadow:0 3px 0 rgba(0,0,0,.35),inset 0 0 0 2px #c0954a;}
@@ -93,14 +96,14 @@ html,body{height:100%;overflow:hidden;background:#1a1916;
 .up-locked{opacity:.42;cursor:not-allowed;}
 .up-locked .up-price{color:#d9483b;}
 /* wave-clear salvage line + tank schematic / build readout */
-.shop-salvage{font-size:12.5px;font-weight:800;letter-spacing:.03em;color:#e8c84a;min-height:15px;}
+.shop-salvage{font-size:11.5px;font-weight:800;letter-spacing:.03em;color:#e8c84a;min-height:13px;}
 /* build panel = the "ship" on the left of the store row: tank schematic above the build readout */
-#shopBuild{flex:0 0 auto;width:clamp(190px,23vw,250px);display:flex;flex-direction:column;
-  gap:10px;align-items:center;justify-content:center;
-  background:rgba(0,0,0,.22);border-radius:14px;padding:14px 16px;overflow:auto;}
+#shopBuild{flex:0 0 auto;width:clamp(150px,19vw,210px);display:flex;flex-direction:column;
+  gap:8px;align-items:center;justify-content:center;
+  background:rgba(0,0,0,.22);border-radius:14px;padding:11px 12px;overflow:auto;}
 #shopBuild:empty{display:none;}
-.build-tank svg{display:block;width:clamp(50px,8vh,76px);height:auto;}
-.build-info{display:flex;flex-direction:column;gap:3px;font-size:12px;width:100%;min-width:0;}
+.build-tank svg{display:block;width:clamp(42px,6.5vh,66px);height:auto;}
+.build-info{display:flex;flex-direction:column;gap:2px;font-size:11.5px;width:100%;min-width:0;}
 .bs-load{display:flex;gap:8px;align-items:baseline;}
 .bs-load>span{opacity:.55;width:52px;flex:none;font-size:11px;text-transform:uppercase;letter-spacing:.05em;}
 .bs-load>b{color:#f3ecd9;font-weight:700;}
