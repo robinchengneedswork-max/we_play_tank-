@@ -2,8 +2,10 @@
 // ui — menus, the tuning panel, mode toggle, start overlay wiring.
 
 const panel=document.getElementById('panel');
-document.getElementById('gear').onclick=()=>panel.classList.add('open');
-document.getElementById('closePanel').onclick=()=>panel.classList.remove('open');
+const closePanel=()=>panel.classList.remove('open');
+document.getElementById('gear').onclick=()=>panel.classList.toggle('open');   // ⚙ toggles (so it closes too)
+document.getElementById('closePanel').onclick=closePanel;
+const panelDone=document.getElementById('panelDone'); if(panelDone) panelDone.onclick=closePanel;   // explicit Close button (optional in DOM)
 document.getElementById('modeBtn').onclick=()=>{
   mode=mode==='brawl'?'pubg':'brawl';
   const b=document.getElementById('modeBtn');
