@@ -77,19 +77,44 @@ function updateHud(){
   elRun.textContent=s;
 }
 
-// ---- Supply Depot (FTL-style shop; pauses the sim via run.phase==='shop') ----
-// Banked scrap is spent here on à-la-carte stat lines (per-line escalating cost), repairs,
-// extra lives, and 2 rolled rulebreakers. Buy as many as you can afford, then leave.
+// ---- Supply Depot (FTL-style; pauses the sim via run.phase==='shop' until EVERY living player leaves) ----
+// Co-op: each player shops their OWN scrap on their OWN phone; the host keyboard seat (LP) uses the
+// on-TV overlay. `shopItems(p)` is the canonical buyable list shared by the local overlay AND the net
+// payload; `shopApply(p,key)` is the single source of truth for a purchase.
 const shopOverlay=document.getElementById('shop');
 const shopCards=document.getElementById('shopCards');
-let shopFlash=null;   // id of the line bought this click → its card + schematic row pulse once, then cleared
-// A small top-down tank schematic: barrel/centre tinted by the equipped gun-mode, a gold glacis
-// bar when front armour is fitted, red treads for Heavy, a violet ring for Vibranium.
-function tankSchematicSVG(){
-  const gc=GUN_COLOR[run.gunMode]||'#cfc8ba';
-  const tread=tank.tracks?'#7a3b32':'#2c2925';
-  const glacis=tank.armor?'<rect x="20" y="17" width="40" height="8" rx="3" fill="#e8c84a"/>':'';
-  const halo=run.vibranium?'<rect x="13" y="19" width="54" height="62" rx="15" fill="none" stroke="#b98cf0" stroke-width="2.5" opacity=".85"/>':'';
+let shopFlash=null;
+let shopPending=new Set();   // ids of players still in the depot; the wave waits until it's empty (no timeout)
+
+// One canonical list of what player p can buy right now (stat lines, consumables, rolled rulebreakers).
+function shopItems(p){
+  const items=[];
+  for(const line of SHOP_STOCK) items.push({ key:line.id, name:line.name, desc:line.desc,
+    cost:shopLineCost(p,line), level:p.buys[line.id]||0, tag:line.weight?'+WT':'' });
+  items.push({ key:'repair', name:'Repair', desc:'Restore 1 HP', cost:REPAIR_COST, disabled:p.hp>=p.maxHp });
+  items.push({ key:'life',   name:'Team Life', desc:'+1 shared team life', cost:LIFE_COST });
+  if(p.gadget) items.push({ key:'rearm', name:'Rearm: '+p.gadget.name, desc:'Refill gadget charges',
+    cost:REARM_COST, disabled:p.gadgetCharges>=p.gadgetMaxCharges });
+  p.shopRb.forEach((u,i)=>{ if(u) items.push({ key:'rb'+i, name:u.name, desc:u.desc, cost:rbCost(p), tag:'RULEBREAKER' }); });
+  return items;
+}
+// Apply a purchase to player p (validates affordability). Returns true if it went through.
+function shopApply(p,key){
+  if(key==='repair'){ if(p.hp<p.maxHp && p.scrap>=REPAIR_COST){ p.scrap-=REPAIR_COST; p.hp++; return true; } return false; }
+  if(key==='life'){ if(p.scrap>=LIFE_COST){ p.scrap-=LIFE_COST; run.maxTeamLives++; run.teamLives++; updateHud(); return true; } return false; }
+  if(key==='rearm'){ if(p.gadget && p.gadgetCharges<p.gadgetMaxCharges && p.scrap>=REARM_COST){ p.scrap-=REARM_COST; p.gadgetCharges=p.gadgetMaxCharges; return true; } return false; }
+  if(key[0]==='r'&&key[1]==='b'){ const i=+key.slice(2), u=p.shopRb[i], c=rbCost(p);
+    if(u && p.scrap>=c){ p.scrap-=c; u.apply(p); p.buys._rb=(p.buys._rb||0)+1; p.shopRb[i]=null; return true; } return false; }
+  const line=SHOP_STOCK.find(l=>l.id===key);
+  if(line){ const c=shopLineCost(p,line); if(p.scrap>=c){ p.scrap-=c; p.buys[line.id]=(p.buys[line.id]||0)+1; if(line.weight) p.weight+=line.weight; line.apply(p); return true; } }
+  return false;
+}
+function pips(n){ return n>0 ? '●'.repeat(Math.min(n,6))+(n>6?' ×'+n:'') : '·'; }
+function tankSchematicSVG(p){
+  const gc=GUN_COLOR[p.gunMode]||'#cfc8ba';
+  const tread=p.tracks?'#7a3b32':'#2c2925';
+  const glacis=p.armor?'<rect x="20" y="17" width="40" height="8" rx="3" fill="#e8c84a"/>':'';
+  const halo=p.vibranium?'<rect x="13" y="19" width="54" height="62" rx="15" fill="none" stroke="#b98cf0" stroke-width="2.5" opacity=".85"/>':'';
   return '<svg viewBox="0 0 80 100" aria-hidden="true">'+halo
     +'<rect x="8" y="22" width="11" height="58" rx="5" fill="'+tread+'"/>'
     +'<rect x="61" y="22" width="11" height="58" rx="5" fill="'+tread+'"/>'
@@ -98,89 +123,81 @@ function tankSchematicSVG(){
     +'<circle cx="40" cy="54" r="15" fill="#6e695f"/>'
     +'<circle cx="40" cy="54" r="4.5" fill="'+gc+'"/></svg>';
 }
-function pips(n){ return n>0 ? '●'.repeat(Math.min(n,6))+(n>6?' ×'+n:'') : '·'; }
-// The build readout next to the schematic: chassis / gun / left slot + per-line stat levels (run.buys).
-function renderShopBuild(){
+function renderShopBuild(p){
   const host=document.getElementById('shopBuild'); if(!host) return;
-  const gun = run.gunMode ? (GUN_GLYPH[run.gunMode]||'◗')+' '+(GUN_NAME[run.gunMode]||run.gunMode) : '— standard';
-  const left = run.gadget ? '⚙ '+run.gadget.name+' ('+run.gadgetCharges+'/'+run.gadgetMaxCharges+')'
-             : run.vibranium ? '⚡ Vibranium'
-             : tank.armor ? '🛡 Front Glacis ('+(run.maxPlates||0)+' plates)'
+  const gun = p.gunMode ? (GUN_GLYPH[p.gunMode]||'◗')+' '+(GUN_NAME[p.gunMode]||p.gunMode) : '— standard';
+  const left = p.gadget ? '⚙ '+p.gadget.name+' ('+p.gadgetCharges+'/'+p.gadgetMaxCharges+')'
+             : p.vibranium ? '⚡ Vibranium'
+             : p.armor ? '🛡 Front Glacis ('+(p.maxPlates||0)+' plates)'
              : '— empty';
-  const rows = SHOP_STOCK.map(line=>{ const lv=run.buys[line.id]||0;
+  const rows = SHOP_STOCK.map(line=>{ const lv=p.buys[line.id]||0;
     return '<div class="bs-row'+(lv?'':' bs-zero')+(shopFlash===line.id?' just-bought':'')+'">'
       +'<span class="bs-name">'+line.name+'</span><span class="bs-pips">'+pips(lv)+'</span></div>'; }).join('');
-  host.innerHTML='<div class="build-tank">'+tankSchematicSVG()+'</div>'
+  host.innerHTML='<div class="build-tank">'+tankSchematicSVG(p)+'</div>'
     +'<div class="build-info">'
-      +'<div class="bs-load"><span>Chassis</span><b>'+(run.class?run.class.name:'Standard')+'</b></div>'
+      +'<div class="bs-load"><span>Chassis</span><b>'+(p.class?p.class.name:'Standard')+'</b></div>'
       +'<div class="bs-load"><span>Gun</span><b>'+gun+'</b></div>'
       +'<div class="bs-load"><span>Left</span><b>'+left+'</b></div>'
       +'<div class="bs-stats">'+rows+'</div></div>';
 }
-// DEFERRED (B1.10 / B2): the depot is now per-player + networked. In the B1 core pass it is bypassed
-// (finishWave rolls straight into the next wave); this stub keeps any stray caller safe. The single-
-// player shop renderers below are retained as a reference to port from, but are currently unreachable.
-function openShop(){ nextWave(); }
-function openShopLEGACY(){
-  run.phase='shop';
-  shake=0;                  // kill any leftover shake from the wave-ending hit
-  rollShopRulebreakers();   // fresh pair of rulebreakers for this visit
-  renderShop();
-  shopOverlay.classList.add('active');
-}
-// Build one purchasable card. cost: number; cls: extra class; onbuy: () => void.
-function shopCard(name, desc, cost, opts){
-  opts=opts||{};
-  const afford = run.scrap>=cost && !opts.disabled;
+function shopCard(it, p){
+  const afford = p.scrap>=it.cost && !it.disabled;
+  const rb = it.tag==='RULEBREAKER';
   const b=document.createElement('button');
-  b.className='up-card '+(opts.cls||'')+(afford?'':' up-locked')+((opts.flashId&&shopFlash===opts.flashId)?' just-bought':'');
-  const tag = opts.tag ? '<span class="up-tier">'+opts.tag+'</span>' : '';
-  const lvl = opts.level ? '<span class="up-lvl">Lv '+opts.level+'</span>' : '';
-  const price = opts.sold ? 'SOLD' : (opts.disabled ? opts.disabledLabel||'—' : '◆ '+cost);
-  b.innerHTML=tag+lvl+'<b>'+name+'</b><small>'+desc+'</small><span class="up-price">'+price+'</span>';
-  if(afford) b.onclick=()=>{ run.scrap-=cost; opts.onbuy(); shopFlash=opts.flashId||name; SFX.hit(); updateHud(); renderShop(); };
+  b.className='up-card '+(rb?'up-rulebreaker':(it.tag?'up-rare':''))+(afford?'':' up-locked')+(shopFlash===it.key?' just-bought':'');
+  const tag = it.tag ? '<span class="up-tier">'+it.tag+'</span>' : '';
+  const lvl = it.level ? '<span class="up-lvl">Lv '+it.level+'</span>' : '';
+  const price = it.disabled ? 'FULL' : '◆ '+it.cost;
+  b.innerHTML=tag+lvl+'<b>'+it.name+'</b><small>'+it.desc+'</small><span class="up-price">'+price+'</span>';
+  if(afford) b.onclick=()=>{ if(shopApply(p,it.key)){ shopFlash=it.key; SFX.hit(); updateHud(); renderShopFor(p); } };
   return b;
 }
-function renderShop(){
-  const wt=Math.max(0, run.weight-run.engine);
+// The on-TV depot overlay for the LOCAL keyboard seat.
+function renderShopFor(p){
+  const wt=Math.max(0, p.weight-p.engine);
   document.getElementById('shopBal').textContent =
-    '◆ '+run.scrap+' scrap   ·   ♥ '+run.hp+'/'+run.maxHp+' lives   ·   weight '+run.weight+' / engine '+run.engine+(wt>0?'  (−'+Math.round((1-1/(1+0.07*wt))*100)+'% speed)':'');
+    '◆ '+p.scrap+' scrap   ·   ♥ team '+run.teamLives+'   ·   weight '+p.weight+' / engine '+p.engine+(wt>0?'  (−'+Math.round((1-1/(1+0.07*wt))*100)+'% speed)':'');
   const salv=document.getElementById('shopSalvage');
   if(salv) salv.textContent = run.lastWaveScrap>0 ? '✦ Salvaged ◆'+run.lastWaveScrap+' from the last push' : '';
-  renderShopBuild();
+  renderShopBuild(p);
   shopCards.innerHTML='';
-  // stat lines (per-line escalating cost; weighty lines tagged)
-  SHOP_STOCK.forEach(line=>{
-    const cost=shopLineCost(line);
-    shopCards.appendChild(shopCard(line.name, line.desc, cost, {
-      cls: line.weight?'up-rare':'', level: run.buys[line.id]||0, flashId: line.id,
-      onbuy(){ run.buys[line.id]=(run.buys[line.id]||0)+1; if(line.weight) run.weight+=line.weight; line.apply(); }
-    }));
-  });
-  // consumables
-  shopCards.appendChild(shopCard('Repair', 'Restore one lost life', REPAIR_COST, {
-    disabled: run.hp>=run.maxHp, disabledLabel:'FULL', flashId:'repair',
-    onbuy(){ run.hp=Math.min(run.maxHp, run.hp+1); tank.hp=run.hp; }
-  }));
-  shopCards.appendChild(shopCard('Extra Life', 'Raise max lives by 1 (filled)', LIFE_COST, {
-    flashId:'life',
-    onbuy(){ run.maxHp++; run.hp++; tank.maxHp=run.maxHp; tank.hp=run.hp; }
-  }));
-  if(run.gadget) shopCards.appendChild(shopCard('Rearm: '+run.gadget.name, 'Refill gadget charges', REARM_COST, {
-    disabled: run.gadgetCharges>=run.gadgetMaxCharges, disabledLabel:'FULL', flashId:'rearm',
-    onbuy(){ run.gadgetCharges=run.gadgetMaxCharges; }
-  }));
-  // 2 rolled rulebreakers (shared escalating price); bought ones drop out of the pair
-  run.shopRb.forEach((u,i)=>{
-    if(!u) return;
-    shopCards.appendChild(shopCard(u.name, u.desc, rbCost(), {
-      cls:'up-rulebreaker', tag:'RULEBREAKER', flashId:'rb'+i,
-      onbuy(){ u.apply(); run.buys._rb=(run.buys._rb||0)+1; run.shopRb[i]=null; }
-    }));
-  });
-  shopFlash=null;   // the pulse has been applied to this render; don't carry it to the next
+  for(const it of shopItems(p)) shopCards.appendChild(shopCard(it,p));
+  shopFlash=null;
 }
-document.getElementById('shopLeave').onclick=()=>{ shopOverlay.classList.remove('active'); nextWave(); };
+// Open the depot for the whole party: roll each player's rulebreakers, pause the sim, show the local
+// overlay + push each phone its shop, and wait until everyone has left before the next wave.
+function openDepot(){
+  run.phase='shop'; shake=0;
+  const alive=livingPlayers();
+  for(const p of alive) rollShopRulebreakers(p);
+  shopPending=new Set(alive.map(p=>p.id));
+  const lp=LP();
+  if(lp && !lp.down){ renderShopFor(lp); shopOverlay.classList.add('active'); }
+  if(typeof netOpenShop==='function') for(const p of alive) if(p.id!=='local') netOpenShop(p);
+  updateShopStatus();
+  if(shopPending.size===0) closeDepot();       // rare double-KO at clear → nobody to shop
+}
+function shopDoneFor(p){
+  if(!p || !shopPending.has(p.id)) return;
+  shopPending.delete(p.id);
+  if(p.id==='local') shopOverlay.classList.remove('active');
+  else if(typeof netCloseShop==='function') netCloseShop(p);
+  updateShopStatus();
+  if(shopPending.size===0) closeDepot();
+}
+function closeDepot(){
+  shopOverlay.classList.remove('active');
+  const w=document.getElementById('shopwait'); if(w) w.style.display='none';
+  nextWave();
+}
+// TV indicator while the local seat is done but phones are still shopping (host injects #shopwait).
+function updateShopStatus(){
+  const w=document.getElementById('shopwait'); if(!w) return;
+  const names=[...shopPending].map(id=>{ const q=players.find(x=>x.id===id); return q?q.name:id; });
+  if(!shopPending.has('local') && shopPending.size>0){ w.style.display='flex'; w.textContent='Depot — waiting for '+names.join(', ')+'…'; }
+  else w.style.display='none';
+}
+document.getElementById('shopLeave').onclick=()=>{ const lp=LP(); if(lp) shopDoneFor(lp); else closeDepot(); };
 
 // ---- game over / run summary ----
 const gameover=document.getElementById('gameover');

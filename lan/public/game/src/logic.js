@@ -848,10 +848,10 @@ function finishWave(){
   run.lastWaveScrap = run.waveScrap;
   if(run.waveScrap>0){ const c=partyCenter(); burst(c.x, c.y-20, '#e8c84a', 18); SFX.waveStart(); }
   updateHud();
-  // TODO (B1.10 / B2): a per-player Supply Depot opens here on the wave cadence
-  // (run.waveKind==='boss' || run.level%SHOP_EVERY===0). The shop UI is per-player + networked, so it's
-  // deferred to the economy/networking pass — for the B1 core loop we roll straight into the next wave.
-  nextWave();
+  // Per-player Supply Depot opens on the cadence (every SHOP_EVERY waves + after every boss); it pauses
+  // the sim until every living player leaves. Otherwise roll straight into the next wave.
+  if(run.waveKind==='boss' || run.level%SHOP_EVERY===0) openDepot();
+  else nextWave();
 }
 function updateSiege(dt, now){
   if(!run.siege || run.phase!=='fighting' || run.siege.phase!=='hold') return;

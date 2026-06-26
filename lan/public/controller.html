@@ -41,6 +41,25 @@
     border:3px solid rgba(255,255,255,.7);background:rgba(95,160,210,.82);color:#fff;font-size:22px;
     font-weight:800;cursor:pointer;display:none;}
   #deployBtn:active{background:rgba(95,160,210,1);}
+  /* on-phone Supply Depot */
+  #cshop{position:fixed;inset:0;z-index:40;display:none;flex-direction:column;background:rgba(20,19,16,.97);
+    color:#f3ecd9;padding:max(10px,env(safe-area-inset-top)) 12px 12px;gap:8px;}
+  #cshopHead{flex:none;text-align:center;}
+  #cshopHead h2{font-size:15px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;opacity:.85;}
+  #cshopBal{display:inline-block;background:rgba(255,255,255,.1);border-radius:999px;padding:4px 12px;font-size:13px;font-weight:700;color:#e8c84a;margin-top:4px;}
+  .cssub{font-size:11px;opacity:.7;margin-top:2px;} .cssub.gold{color:#e8c84a;opacity:.9;}
+  #cshopCards{flex:1 1 auto;overflow-y:auto;display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:7px;padding:2px;}
+  .cscard{position:relative;text-align:left;border:none;border-radius:11px;background:#2c2925;color:#f3ecd9;
+    padding:9px 11px 22px;box-shadow:0 3px 0 rgba(0,0,0,.35);font:inherit;cursor:pointer;}
+  .cscard b{display:block;font-size:13px;font-weight:800;color:#cde0f5;margin-bottom:3px;}
+  .cscard small{font-size:10.5px;opacity:.78;line-height:1.25;}
+  .csprice{position:absolute;right:10px;bottom:6px;font-size:11px;font-weight:800;color:#e8c84a;}
+  .cstag{display:inline-block;font-size:8px;font-weight:800;letter-spacing:.1em;padding:1px 6px;border-radius:999px;margin-bottom:3px;background:#6b4d22;color:#f0d9a8;}
+  .cslvl{position:absolute;right:10px;top:9px;font-size:8px;font-weight:800;color:#bcd8f5;background:#2d4f72;padding:1px 6px;border-radius:999px;}
+  .cscard.rb{box-shadow:0 3px 0 rgba(0,0,0,.35),inset 0 0 0 2px #c0954a;}
+  .cscard.wt .cstag{background:#2d4f72;color:#bcd8f5;}
+  .cscard.lock{opacity:.42;} .cscard.lock .csprice{color:#d9483b;}
+  #cshopLeave{flex:none;padding:13px;border:none;border-radius:12px;background:#3b6fb5;color:#fff;font-size:15px;font-weight:800;cursor:pointer;}
 </style>
 </head>
 <body>
@@ -65,6 +84,16 @@
   <button id="startBtn">Tap to join</button>
 </div>
 <button id="deployBtn" aria-label="Deploy gadget">⚙</button>
+<div id="cshop">
+  <div id="cshopHead">
+    <h2>Supply Depot</h2>
+    <span id="cshopBal"></span>
+    <p id="cshopBuild" class="cssub"></p>
+    <p id="cshopSalv" class="cssub gold"></p>
+  </div>
+  <div id="cshopCards"></div>
+  <button id="cshopLeave">Leave the depot →</button>
+</div>
 
 <script src="/shared/protocol.js"></script>
 <script>
@@ -101,6 +130,8 @@ function connect(){
       document.getElementById('who').style.color=m.color;
       sendClass(); }                       // tell the host which tank we picked
     if(m.type==='haptic' && cfg.haptics && navigator.vibrate) navigator.vibrate(m.pattern||[20]);
+    if(m.type==='shop') renderCShop(m);
+    if(m.type==='shopclose') hideCShop();
   };
 }
 function setConn(s,t){ const d=document.getElementById('dot');
@@ -110,6 +141,29 @@ function sendFire(aim){ if(wsReady) ws.send(JSON.stringify({type:'fire',aim})); 
 function sendDeploy(){ if(wsReady) ws.send(JSON.stringify({type:'deploy'})); }
 let myClass='medium';
 function sendClass(){ if(wsReady) ws.send(JSON.stringify({type:'classSelect',class:myClass})); }
+function sendBuy(key){ if(wsReady) ws.send(JSON.stringify({type:'buy',key})); }
+function sendShopDone(){ if(wsReady) ws.send(JSON.stringify({type:'shopDone'})); }
+
+// ---- Supply Depot on the phone (host pushes {shop}; we render cards, buy, then leave) ----
+function hideCShop(){ const o=document.getElementById('cshop'); if(o) o.style.display='none'; }
+function renderCShop(m){
+  const o=document.getElementById('cshop'); o.style.display='flex';
+  const wt = m.penalty>0 ? '  ·  −'+m.penalty+'% spd' : '';
+  document.getElementById('cshopBal').textContent='◆ '+m.scrap+'  ·  ♥ team '+m.lives+wt;
+  document.getElementById('cshopBuild').textContent=m.build.chassis+' · '+m.build.gun+' · '+m.build.left;
+  const sv=document.getElementById('cshopSalv'); sv.textContent = m.salvage>0 ? '✦ salvaged ◆'+m.salvage+' last push' : '';
+  const wrap=document.getElementById('cshopCards'); wrap.innerHTML='';
+  for(const it of m.items){
+    const afford = m.scrap>=it.cost && !it.disabled;
+    const b=document.createElement('button');
+    b.className='cscard'+(it.tag==='RULEBREAKER'?' rb':(it.tag?' wt':''))+(afford?'':' lock');
+    const tag=it.tag?'<span class="cstag">'+it.tag+'</span>':'';
+    const lvl=it.level?'<span class="cslvl">Lv '+it.level+'</span>':'';
+    b.innerHTML=tag+lvl+'<b>'+it.name+'</b><small>'+it.desc+'</small><span class="csprice">'+(it.disabled?'FULL':'◆ '+it.cost)+'</span>';
+    if(afford) b.onclick=()=>{ sendBuy(it.key); if(cfg.haptics&&navigator.vibrate) navigator.vibrate(10); };
+    wrap.appendChild(b);
+  }
+}
 
 // ---- pointer -> stick role ----
 const pointers=new Map();
@@ -203,6 +257,7 @@ document.querySelectorAll('#classPick .clsBtn').forEach(b=>{
 const deployBtn=document.getElementById('deployBtn');
 deployBtn.addEventListener('pointerdown',e=>{ e.preventDefault(); sendDeploy();
   if(cfg.haptics&&navigator.vibrate) navigator.vibrate(12); });
+document.getElementById('cshopLeave').onclick=()=>{ hideCShop(); sendShopDone(); };
 
 document.getElementById('startBtn').onclick=async()=>{
   try{ await document.documentElement.requestFullscreen(); }catch(e){}

@@ -9,6 +9,23 @@ const NET = (() => {
   const COLORS=['#3b6fb5','#c0584a','#4a9d5b','#d9a441','#8a5cc0','#d97a3b','#3ba6a6','#c05c9a'];
   function pid(id){ for(const p of players) if(p.id===id) return p; return null; }
   const inRun = ()=> started && gameMode==='roguelike';
+  function send(o){ if(ws&&ws.readyState===1) ws.send(JSON.stringify(o)); }
+
+  // ---- depot (host pushes each phone its own shop; phone sends buy/shopDone) ----
+  function shopPayload(p){
+    const wt=Math.max(0,p.weight-p.engine);
+    return { type:'shop', to:p.id, scrap:p.scrap, lives:run.teamLives,
+      weight:p.weight, engine:p.engine, penalty: wt>0?Math.round((1-1/(1+0.07*wt))*100):0,
+      salvage:run.lastWaveScrap,
+      build:{ chassis:p.class?p.class.name:'Standard',
+              gun:p.gunMode?(GUN_NAME[p.gunMode]||p.gunMode):'standard',
+              left:p.gadget?(p.gadget.name+' '+p.gadgetCharges+'/'+p.gadgetMaxCharges)
+                  :(p.vibranium?'Vibranium':(p.armor?'Front Glacis':'empty')) },
+      items: shopItems(p) };          // shopItems/shopApply/shopDoneFor are engine globals (ui.js)
+  }
+  function netOpenShop(p){ send(shopPayload(p)); }
+  function netCloseShop(p){ send({type:'shopclose', to:p.id}); }
+  window.netOpenShop=netOpenShop; window.netCloseShop=netCloseShop;   // openDepot()/shopDoneFor() call these
 
   // ---- join card + roster UI (injected; no host.html markup needed) ----
   function ui(){
@@ -26,13 +43,17 @@ const NET = (() => {
         border-radius:999px;padding:5px 12px 5px 8px;font:700 13px system-ui;color:#2c2a26;box-shadow:0 2px 6px rgba(0,0,0,.16);}
       #netroster .sw{width:14px;height:14px;border-radius:4px;}
       #netroster .pl.down{opacity:.45;}
-      body.ingame #netbar{opacity:.0;pointer-events:none;transition:opacity .3s;}`;
+      body.ingame #netbar{opacity:.0;pointer-events:none;transition:opacity .3s;}
+      #shopwait{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);z-index:55;display:none;
+        align-items:center;background:rgba(33,31,27,.9);color:#f0e9d6;padding:10px 20px;border-radius:999px;
+        font:700 15px system-ui;box-shadow:0 4px 14px rgba(0,0,0,.4);}`;
     document.head.appendChild(s);
     const bar=document.createElement('div'); bar.id='netbar';
     bar.innerHTML=`<canvas id="netqr"></canvas><div><h2>Join on your phone</h2>
       <div class="url" id="neturl">…</div><div class="sub">same Wi-Fi · open in a browser</div></div>`;
     document.body.appendChild(bar);
     const ros=document.createElement('div'); ros.id='netroster'; document.body.appendChild(ros);
+    const w=document.createElement('div'); w.id='shopwait'; document.body.appendChild(w);   // "waiting for phones to shop"
   }
   function renderRoster(){
     const ros=document.getElementById('netroster'); if(!ros) return; ros.innerHTML='';
@@ -82,7 +103,8 @@ const NET = (() => {
       case 'input': { const p=pid(m.id); if(p){ const it=p.intent; it.mx=m.mx; it.my=m.my; it.aim=m.aim; it.aiming=m.aiming; } break; }
       case 'fire':  { const p=pid(m.id); if(p && !p.down){ p.intent.aim=m.aim; tryFire(p); } break; }
       case 'deploy':{ const p=pid(m.id); if(p && !p.down) deployGadget(p); break; }
-      // pick / buy / shopDone → between-wave per-player upgrade & depot flow (deferred to B2 Stage 3).
+      case 'buy': { const p=pid(m.id); if(p && shopApply(p,m.key)){ updateHud(); netOpenShop(p); } break; }
+      case 'shopDone': { shopDoneFor(pid(m.id)); break; }
     }
   }
 
